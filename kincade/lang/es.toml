@@ -126,6 +126,8 @@ burial = "sepult."
 burial_place = "en"
 cremation = "crem."
 cremation_place = "en"
+# Emigration date (--emigration), without its place: emigró.
+emigration = "emig."
 
 [dates]
 # ABT → hacia, EST → est. (estimada), CAL → calc. (calculada).

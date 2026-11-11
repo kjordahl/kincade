@@ -127,6 +127,8 @@ burial = "sep."
 burial_place = ""
 cremation = "crem."
 cremation_place = ""
+# Emigration date (--emigration), without its place: emigrato.
+emigration = "emigr."
 
 [dates]
 # ABT → ca. (circa), EST → stim. (stimata), CAL → calc. (calcolata). ante and post, as

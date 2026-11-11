@@ -45,7 +45,7 @@ root or in a subfolder. Build output and the wheel cache are ignored by Git.
 
 The HTML inlines the app, worker and Python glue and a JSON manifest whose keys
 are `pyodide: {version, base}`, `wheel: {name, sha256}`, `reportlab` (the exact
-requirement), `fonts` (four `{name, url, sha256}` objects), `kincade` (the version)
+requirement), `fonts` (five `{name, url, sha256}` objects), `kincade` (the version)
 and `sample: {name, text}` from `docs/examples/george-washington.ged`. The build escapes
 `<` as `\u003c` in JSON and refuses `</script` and `<!--` in inlined source,
 in any letter case. It derives Kincade's version from the wheel filename and
@@ -105,13 +105,13 @@ do hosts (`jsdelivr`, `pypi`, `site`, `none`); the page words them.
 4. Fetch the site wheel with `?v=<first 12 hex digits of its SHA-256>`, write it
    to `/tmp/<wheel name>`, compare its SHA-256 with the manifest using Python's
    `hashlib`, then install from `emfs:/tmp/<wheel name>`.
-5. Fetch the four font files from jsDelivr, check them with `hashlib`, and write
+5. Fetch the five font files from jsDelivr, check them with `hashlib`, and write
    only matching files to `/fonts` under their manifest names.
 6. Run the glue, create a `Session`, and call `load_fonts("/fonts")`.
 
 A wheel mismatch fails initialization, names this site and asks the reader to
 reload matching files; Retry reloads. Each missing or mismatched font is left
-out, and failure to load all four roles selects `BASE14`. The summary then
+out, and failure to load all five roles selects `BASE14`. The summary then
 names built-in fonts, whose Windows-1252 coverage strips unsupported accents
 or replaces characters with `?`. Integrity uses `hashlib`, without a
 `crypto.subtle` secure-context dependency. Automated acceptance checks a plain
@@ -134,7 +134,7 @@ error with details by its operation and shows a `ValueError` message as written.
 
 `Session` holds the successfully opened tree and the font set, initially
 `BASE14`. `load_fonts(directory)` calls `load_fontset([Path(directory)])` and
-returns `"embedded"` only when all four roles load, otherwise `"base14"`.
+returns `"embedded"` only when all five roles load, otherwise `"base14"`.
 `open(data: bytes)` returns the person count and changes the tree only after a
 successful read with at least one person. An unreadable or no-people file
 leaves the previous tree intact.
@@ -856,7 +856,7 @@ Each entry ends with the boxes where the person is drawn, each from the language
 
 ## Fonts
 
-`Options.fonts` is `"auto"` (always, on the command line), `"base14"` or a `FontSet` of four roles: sans (the name line, the chart label, the footer and the other small text), bold (the title and box numbers), serif (the detail lines and the index) and italic (the continuation numbers).
+`Options.fonts` is `"auto"` (always, on the command line), `"base14"` or a `FontSet` of five roles: sans (the name line, the chart label, the footer and the other small text), bold (the title and box numbers), serif (the detail lines and the index), italic (the continuation numbers) and serif_bold (the emigration line).
 
 `kincade.lang.KincadeWarning` is a `UserWarning` subclass. Unknown language keys
 and automatic font fallback use `warnings.warn(..., stacklevel=2)`. Library

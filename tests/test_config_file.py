@@ -506,7 +506,7 @@ paper = "a3"
     )
     assert capsys.readouterr().out == (
         "I1\tJane ASHFORD\t1980-\n"
-        "    F101\tTom BAKER\tm. 5 Jun 2005\tmp. Peoria, Illinois\t(default)\n"
+        "    F101\tTom BAKER\tmarriage: 5 Jun 2005\tPeoria, Illinois\t(default)\n"
     )
     assert not list(tmp_path.glob("*.pdf"))  # --find skipped the mode checks
 

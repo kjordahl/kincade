@@ -41,7 +41,7 @@ from kincade.pdf import render_pdf
 
 from conftest import FIX, TODAY
 from conftest import render as render_with_defaults
-from pdfread import count_pages, drawn, rectangles, runs
+from pdfread import count_pages, drawn, lines, rectangles, runs
 
 
 def opts(**kw):
@@ -165,9 +165,11 @@ def test_a_tree_built_in_code_renders_in_one_call():
     text = drawn(pdf)
     assert "Dayton PELL" in text and "Bob PELL" in text and "Ann GRAY" in text
     assert "Cy PELL" not in text  # birth mode: the step/adopted family is not drawn
-    assert "b. 2 Apr 1850" in text and "bp. Reno, NV" in text
-    assert "m. 1848" in text and "mp. Elko, NV" in text
-    assert "chr. 1800" in text  # Bob's christening stands in for his missing birth
+    assert "birth: 2 Apr 1850" in text and "Reno, NV" in text
+    assert "marriage: 1848" in text and "Elko, NV" in text
+    assert (
+        "christening: 1800" in text
+    )  # Bob's christening stands in for his missing birth
     assert "PELL, Dayton (b. 1850), 1-1" in text
 
     adoptive = drawn(render(tree, "p1", opts(generations=2, adoptive_parents=True)))
@@ -234,6 +236,10 @@ def test_options_mirror_the_command_line():
         "fonts",
         "preserve_case",
         "root_family",
+        "marriages",
+        "emigration",
+        "header",
+        "prefix",
     ]
     flags = vars(kincade.cli._parser().parse_args(["x.ged", "--root", "I1"]))
     # a field that is off by default has a flag of its name; one that is on, a no- flag
@@ -242,9 +248,11 @@ def test_options_mirror_the_command_line():
         "preserve_case",
         "adoptive_parents",
         "show_ids",
+        "emigration",
         "large_print",
         "shadow",
         "title",
+        "prefix",
         "paper",
         "generations",
         "lang",
@@ -256,6 +264,8 @@ def test_options_mirror_the_command_line():
     for name, flag in (
         ("event_standins", "no_event_standins"),
         ("empty_boxes", "no_empty"),
+        ("marriages", "no_marriage"),
+        ("header", "no_header"),
         ("shorten_places", "no_shorten_places"),
         ("index", "no_index"),
         ("page_numbers", "no_page_numbers"),
@@ -360,6 +370,32 @@ def test_each_option_changes_the_pdf(pedigree):
             lambda pdf: (
                 len(rectangles(pdf, "B*", page=None))
                 < len(rectangles(base, "B*", page=None))
+            ),
+        ),
+        (
+            "marriages=False",
+            {"marriages": False},
+            # no m./mp. lines, and the fathers' boxes are as short as the mothers'
+            lambda pdf: (
+                "marriage:" in drawn(base)
+                and not any(t.startswith("marriage:") for t in drawn(pdf))
+                and len({h for *_, h in rectangles(pdf, "B*")[1:]}) == 1
+                and len({h for *_, h in rectangles(base, "B*")[1:]}) == 2
+            ),
+        ),
+        (
+            # no title, chart label, rule or note on a chart page; the index keeps
+            # its heading
+            "header=False",
+            {"header": False},
+            lambda pdf: (
+                "Chart 1" in drawn(base)
+                and not any(
+                    t.startswith(("Cascading Pedigree", "Chart ", "Ancestry continues"))
+                    for t in drawn(pdf)
+                )
+                and "Index" in drawn(pdf)
+                and len(lines(pdf)) == len(lines(base)) - 1
             ),
         ),
         (

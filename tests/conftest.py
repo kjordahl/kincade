@@ -250,7 +250,7 @@ def secret_shown(tree, root="I1", **opts):
     """Whether Dad's birth place is drawn when the details of people who may be living
     are hidden."""
     pdf = render_charts(tree, root, exclude_private=True, **opts)
-    return f"bp. {SECRETVILLE}" in drawn(pdf)
+    return SECRETVILLE in drawn(pdf)
 
 
 # ---------------------------------------------------------------- Kid's families

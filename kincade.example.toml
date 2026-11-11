@@ -14,11 +14,12 @@
 #
 # --blank (one blank chart to fill in by hand) and --find (a list of the people who
 # match) are modes of one run and have no key. --blank reads no GEDCOM file, so gedcom
-# and root do not apply to it; paper, large_print, shadow, lang, title, footer,
-# no_footer and output do.
+# and root do not apply to it; paper, large_print, shadow, lang, title, no_header,
+# prefix, footer, no_footer and output do.
 #
-# A fan run ignores pedigree-only keys: root_family, no_empty, no_index, shadow, show_ids,
-# no_page_numbers, no_shorten_places and large_print. --find still lists people,
+# A fan run ignores pedigree-only keys: family, root_family, no_empty, no_index, shadow, show_ids,
+# no_page_numbers, no_header, prefix, no_marriage, emigration, no_shorten_places and
+# large_print. --find still lists people,
 # and --blank still makes a blank pedigree when fan = true.
 #
 # Paths: gedcom is relative to the folder this file is in, and ~ is your home folder.
@@ -32,8 +33,15 @@
 gedcom = "family.ged"
 
 # The person at the head of chart 1: a record ID (I12, or @I12@ as GEDCOM writes it) or
-# part of a name. Needed unless the run is --find or --blank.
+# part of a name. Needed unless the run is --find or --blank, or has a family.
 root = "@I12@"
+
+# A family record ID (F2) instead of root: chart 1 holds all the couple's children
+# together in its first box, with the couple and their ancestors above, so one chart
+# shows the ancestry of every sibling. root and family cannot both be set in a file; on
+# the command line, one replaces the other. Pedigree only; ignored by fan and blank
+# charts, and root_family does not apply to it.
+# family = "F2"
 
 # The initial pedigree root's spouse and marriage family: a record ID belonging to
 # the root as a partner (default: first FAMS). Does not choose ancestors or add the
@@ -67,6 +75,14 @@ exclude_private = false
 # for a missing death). The privacy estimate reads all of them either way.
 no_event_standins = false
 
+# true leaves out the marriage date and place lines in the boxes (default: false).
+no_marriage = false
+
+# true adds an emigration date line (from the EMIG record; the place is not drawn)
+# after the marriage. When anyone drawn has an emigration date, every box grows a line
+# to make room for it (default: false).
+emigration = false
+
 # true prints each person's record ID (such as I12) in small type at the upper right of
 # their box, with its capital letters aligned at the top with the name's capitals,
 # and after their name in the index (default: false).
@@ -75,6 +91,10 @@ show_ids = false
 # true leaves off the "Page n of N" numbers at the bottom left of every page (default:
 # false).
 no_page_numbers = false
+
+# true leaves the title, the "Chart n" label, the rule under them and the note below
+# it off every chart page; the index keeps its own heading (default: false).
+no_header = false
 
 # Printed places have trimmed comma-separated parts, no empty parts, and a space
 # after each comma. A place too long for its box line is shortened first: the home
@@ -120,6 +140,10 @@ ink = "color"
 
 # The page title (default: the language's title).
 # title = "Family Pedigree"
+
+# Text before every box number, so "D-" numbers the boxes D-1, D-2, ... (default:
+# none).
+# prefix = "D-"
 
 # The footer text (default: the language's footer, with the date). Cannot be combined
 # with no_footer = true.

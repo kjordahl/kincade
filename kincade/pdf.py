@@ -33,6 +33,7 @@ from .charts import (
     nobody_living,
     page_depth,
     plan_charts,
+    plan_family_charts,
 )
 from .lang import (
     DEFAULT_STRINGS,
@@ -228,14 +229,15 @@ def fit_squeezed_noted(
 
 @dataclass(frozen=True)
 class FontSet:
-    """The four faces a page uses: name/header sans, box numbers, detail serif,
-    continuation italic.
+    """The five faces a page uses: name/header sans, box numbers, detail serif,
+    continuation italic, and the bold serif of the emigration line.
     """
 
     sans: str = "Helvetica"
     bold: str = "Helvetica-Bold"
     serif: str = "Times-Roman"
     italic: str = "Times-Italic"
+    serif_bold: str = "Times-Bold"
     # does every face have a glyph for this character?
     supports: Callable[[str], bool] = _cp1252_ok
     files: tuple[str, ...] = ()  # TrueType files embedded (empty for the base-14 fonts)
@@ -270,6 +272,11 @@ FONT_FILES: dict[str, list[tuple[str, str | None]]] = {
         ("Times New Roman Italic.ttf", None),
         ("timesi.ttf", None),
         ("LiberationSerif-Italic.ttf", None),
+    ],
+    "serif_bold": [
+        ("Times New Roman Bold.ttf", None),
+        ("timesbd.ttf", None),
+        ("LiberationSerif-Bold.ttf", None),
     ],
 }
 
@@ -529,7 +536,7 @@ def _first_face(
 def _resolve(
     dirs: list[Path] | None = None,
 ) -> tuple[FontSet | None, list[str], list[str]]:
-    """Resolve and register all four roles: (fonts or None, roles that cannot be used,
+    """Resolve and register all five roles: (fonts or None, roles that cannot be used,
     font files refused).
     """
     found = find_font_files(dirs)
@@ -551,13 +558,14 @@ def _resolve(
     if missing:
         return None, missing, refused
     # the role order of FONT_FILES
-    sans, bold, serif, italic = (face.name for face in faces)
+    sans, bold, serif, italic, serif_bold = (face.name for face in faces)
     return (
         FontSet(
             sans=sans,
             bold=bold,
             serif=serif,
             italic=italic,
+            serif_bold=serif_bold,
             supports=lambda ch: all(face.covers(ch) for face in faces),
             files=tuple(files),
         ),
@@ -567,7 +575,7 @@ def _resolve(
 
 
 def load_fontset(dirs: list[Path] | None = None) -> tuple[FontSet | None, list[str]]:
-    """Find the four faces in the font folders and register them with reportlab, each
+    """Find the five faces in the font folders and register them with reportlab, each
     face once per process, printing nothing: (the FontSet, []) when every role loads,
     else (None, the roles it could not fill). A role whose face may not be embedded is
     one it could not fill. `dirs` replaces the system and user font folders. Pass the
@@ -578,7 +586,7 @@ def load_fontset(dirs: list[Path] | None = None) -> tuple[FontSet | None, list[s
 
 
 def choose_fonts(mode: str | FontSet = "auto") -> FontSet:
-    """'auto': embed TrueType fonts if all four roles resolve, else the base-14 fonts
+    """'auto': embed TrueType fonts if all five roles resolve, else the base-14 fonts
     (never mixed).
     """
     if isinstance(mode, FontSet):
@@ -653,6 +661,8 @@ INDEX_TOP, INDEX_HANGING = 58, 10  # first baseline, wrapped-line indent
 CONTINUATION_EDGE = 6
 # a box number ends this far left of its box (large print: scaled by 14/9)
 BOX_NUMBER_GAP = 4
+# a box number (with its --prefix) keeps this far from the page's left edge
+NUMBER_EDGE = 6
 CONTINUATION_DROP = 3  # baseline below the box's center, scaled with print size
 # a continuation chart number starts this far right of its box,
 # or of the box's shadow (scaled)
@@ -685,14 +695,18 @@ def shadow_reach(large_print: bool = False) -> float:
 
 
 def has_marriage_lines(pos: int) -> bool:
-    return pos == 1 or pos % 2 == 0  # the root and fathers show m./mp.; mothers do not
+    return pos == 1 or pos % 2 == 0  # root and fathers: marriages; mothers: none
 
 
-def box_height(pos: int, scale: float = 1.0) -> float:
-    """Root and fathers: name + 6 detail lines (78 pt); mothers: name + 4 (58 pt). Large
-    print scales it.
+def box_height(
+    pos: int, scale: float = 1.0, marriages: bool = True, emigration: bool = False
+) -> float:
+    """Root and fathers: name + 6 detail lines (78 pt); mothers, and every box without
+    `marriages`: name + 4 (58 pt). `emigration` adds a line to every box. Large print
+    scales it.
     """
-    lines = 7 if has_marriage_lines(pos) else 5
+    lines = 7 if marriages and has_marriage_lines(pos) else 5
+    lines += 1 if emigration else 0
     return (NAME_BASE + DETAIL_GAP + (lines - 2) * LEADING + BOTTOM_PAD) * scale
 
 
@@ -719,7 +733,12 @@ BOX_W, BOX_X0 = column_layout(page_depth(), RIGHT_EDGE)
 TEXT_WIDTH = BOX_W - TEXT_INSET_LEFT - TEXT_INSET_RIGHT
 
 
-def _box_tops(y_bottom: float, large_print: bool = False) -> dict[int, float]:
+def _box_tops(
+    y_bottom: float,
+    large_print: bool = False,
+    marriages: bool = True,
+    emigration: bool = False,
+) -> dict[int, float]:
     """The right column (the last generation's boxes) stacked from Y_TOP to y_bottom
     with one uniform gap that fills the space exactly, in both print sizes. Other
     boxes sit midway between their parents' facing edges. The root sits between its
@@ -728,7 +747,10 @@ def _box_tops(y_bottom: float, large_print: bool = False) -> dict[int, float]:
     scale = LARGE_SCALE if large_print else 1.0
     first = 2 ** (page_depth(large_print) - 1)
     right = range(first, 2 * first)
-    heights = {pos: box_height(pos, scale) for pos in range(1, 2 * first)}
+    heights = {
+        pos: box_height(pos, scale, marriages, emigration)
+        for pos in range(1, 2 * first)
+    }
     gap = (y_bottom - Y_TOP - sum(heights[pos] for pos in right)) / (len(right) - 1)
     y = Y_TOP
     tops = {}
@@ -810,11 +832,21 @@ class PageGeom:
         return RECORD_ID_SHARE * self.text_w
 
     root_spouse: bool = False  # one extra row on the initial root only
+    # a family chart's box 1 (the children's box) has its own height, set per chart
+    root_height: float | None = None
+    # False (--no-marriage): the root's and fathers' boxes lose their marriage rows
+    marriages: bool = True
+    # True (--emigration, when someone drawn has an emigration date): every box has a
+    # row for it
+    emigration: bool = False
 
     def h(self, pos: int) -> float:
-        """The height of a box, including the initial root's spouse row."""
+        """The height of a box, including the initial root's spouse row. A family
+        chart's box 1 has root_height."""
+        if pos == 1 and self.root_height is not None:
+            return self.root_height
         extra = self.leading if pos == 1 and self.root_spouse else 0.0
-        return box_height(pos, self.scale) + extra
+        return box_height(pos, self.scale, self.marriages, self.emigration) + extra
 
     @property
     def right(self) -> float:
@@ -842,13 +874,19 @@ class PageGeom:
 
 @functools.cache
 def page_geom(
-    paper: str = "letter", large_print: bool = False, shadow: bool = False
+    paper: str = "letter",
+    large_print: bool = False,
+    shadow: bool = False,
+    marriages: bool = True,
+    emigration: bool = False,
 ) -> PageGeom:
     """The layout for a paper. With `shadow`, the chart area makes room for the drop
     shadows: its bottom edge rises by shadow_reach, so the lowest shadow fits above
     BOTTOM_INSET. The right column's edge moves in only if a shadow would otherwise pass
     the right margin (A4 normal print). All columns share the resulting width. Without
-    `shadow`, no room is reserved for shadows.
+    `shadow`, no room is reserved for shadows. Without `marriages`, the root's and the
+    fathers' boxes are as short as the mothers'. With `emigration`, every box is a line
+    taller.
     """
     if paper not in PAPER_SIZES:
         raise ValueError(
@@ -867,10 +905,12 @@ def page_geom(
         width,
         height,
         y_bottom,
-        MappingProxyType(_box_tops(y_bottom, large_print)),
+        MappingProxyType(_box_tops(y_bottom, large_print, marriages, emigration)),
         large_print,
         box_w,
         MappingProxyType(box_x0),
+        marriages=marriages,
+        emigration=emigration,
     )
 
 
@@ -918,10 +958,11 @@ def _frame(
     subtitle: str,
     page_number: str | None = None,
     subtitle_right: float | None = None,
+    header: bool = True,
 ) -> None:
-    """Draw text that is already safe for the font set: title, chart label, rule,
-    subtitle, footer (none when doc.footer is None) and page number (none when
-    page_number is None). Each is fitted (with the ellipsis) into its space. The
+    """Draw text that is already safe for the font set: title, chart label, rule and
+    subtitle (none of them without `header`), footer (none when doc.footer is None)
+    and page number (none when page_number is None). Each is fitted (with the ellipsis) into its space. The
     subtitle may run as far right as subtitle_right (default: the rule's end). The page
     number sits bottom left on the footer's baseline, in at most half the room from the
     left margin to PAGE_NUMBER_EDGE short of the center. The footer is fitted to the
@@ -937,6 +978,8 @@ def _frame(
     )
     c.setFillColorRGB(0, 0, 0)
     title_room = rule_end - left
+    if not header:
+        label = subtitle = ""
     if label:
         title_room = (
             label_right - text_width(label, fonts.sans, LABEL_SIZE) - TITLE_GAP - left
@@ -950,17 +993,18 @@ def _frame(
             LABEL_SIZE,
             right=True,
         )
-    draw_text(
-        c,
-        left,
-        geom.y(TITLE_BASELINE),
-        fit(title, fonts.bold, TITLE_SIZE, title_room, ellipsis),
-        fonts.bold,
-        TITLE_SIZE,
-    )
-    c.setStrokeColorRGB(0, 0, 0)
-    c.setLineWidth(RULE_WIDTH)
-    c.line(left, geom.y(RULE_Y), rule_end, geom.y(RULE_Y))
+    if header:
+        draw_text(
+            c,
+            left,
+            geom.y(TITLE_BASELINE),
+            fit(title, fonts.bold, TITLE_SIZE, title_room, ellipsis),
+            fonts.bold,
+            TITLE_SIZE,
+        )
+        c.setStrokeColorRGB(0, 0, 0)
+        c.setLineWidth(RULE_WIDTH)
+        c.line(left, geom.y(RULE_Y), rule_end, geom.y(RULE_Y))
     if subtitle:
         end = rule_end if subtitle_right is None else subtitle_right
         draw_text(
@@ -997,7 +1041,9 @@ def _frame(
 
 def _shown(chart: Chart, pos: int, empty_boxes: bool) -> bool:
     """Whether a box is drawn: within the chart's generations and, with empty_boxes
-    off, known."""
+    off, known. Box 1 of a family chart holds the children and is always drawn."""
+    if chart.family and pos == 1:
+        return True
     return pos in chart.drawn and (empty_boxes or chart.slots[pos] is not None)
 
 
@@ -1075,13 +1121,15 @@ class BoxLine(NamedTuple):
     """One line of a chart box. label is the name on the name line, else the line's
     label; value is the drawable value, "" when it is empty or hidden for privacy;
     is_place marks a place line, which the place shortening may shorten; note is the
-    relationship note after the name (see --adoptive-parents), on the name line only.
+    relationship note after the name (see --adoptive-parents), on the name line only;
+    bold sets the line in the bold serif (the emigration line).
     """
 
     label: str
     value: str
     is_place: bool
     note: str = ""
+    bold: bool = False
 
     @property
     def text(self) -> str:
@@ -1147,8 +1195,12 @@ def _box_lines(doc: _Doc, chart: Chart, pos: int) -> list[BoxLine]:
         fam = _root_family(tree, p, opts.root_family)
     elif has_marriage_lines(pos):
         # Continuation roots and fathers show the union that produced their child.
-        child = chart.via if pos == 1 else chart.slots[pos // 2]
-        fam = tree.parents_union(child, opts.parents) if child else None
+        if chart.family and pos == 2:
+            # a family chart's father shows the marriage of the family it is rooted at
+            fam = tree.families.get(chart.family)
+        else:
+            child = chart.via if pos == 1 else chart.slots[pos // 2]
+            fam = tree.parents_union(child, opts.parents) if child else None
     hide = opts.exclude_private and is_living(pid)
     marr_hide = hide or bool(
         opts.exclude_private
@@ -1199,13 +1251,29 @@ def _box_lines(doc: _Doc, chart: Chart, pos: int) -> list[BoxLine]:
             else ""
         )
         lines.append(row(labels["spouse"], spouse_name, False))
-    if has_marriage_lines(pos):
+    if opts.marriages and has_marriage_lines(pos):
+        # a known person with no recorded marriage leaves the marriage line empty; an
+        # unknown ancestor's box keeps the label to fill in, and a hidden marriage keeps
+        # it so the box does not tell whether one is recorded
+        unrecorded = bool(pid) and not marr_hide and not marr.filled()
         lines += [
             row(
-                labels["marriage"], format_date(marr.date, drawable_strings), marr_hide
+                "" if unrecorded else labels["marriage"],
+                format_date(marr.date, drawable_strings),
+                marr_hide,
             ),
             row(labels["marriage_place"], marr.place, marr_hide, place=True),
         ]
+    if doc.geom.emigration:
+        # the date only, never the place; a known person without one skips the line
+        # (the box keeps the room at its foot), while an unknown ancestor's box and a
+        # hidden person's keep the label, as for the marriage
+        emigrated = p.emigration.date if p.emigration else None
+        if emigrated is not None or hide or not pid:
+            emigration = row(
+                labels["emigration"], format_date(emigrated, drawable_strings), hide
+            )
+            lines.append(emigration._replace(bold=True))
     lines += [
         row(labels[death_key], format_date(death.date, drawable_strings), hide),
         row(labels[death_key + "_place"], death.place, hide, place=True),
@@ -1293,6 +1361,7 @@ def _drawn_places(doc: _Doc, charts: list[Chart]) -> list[str]:
         line.value
         for chart in charts
         for pos in _shown_boxes(chart, doc.opts.empty_boxes)
+        if not (chart.family and pos == 1)  # the children's box draws no places
         for line in _box_lines(doc, chart, pos)
         if line.is_place and line.value
     ]
@@ -1421,29 +1490,67 @@ def _draw_box_text(c: canvas.Canvas, doc: _Doc, chart: Chart, pos: int) -> None:
     id_room = (
         text_width(record, fonts.sans, geom.id_size) + geom.id_gap if record else 0
     )
-    for i, line in enumerate(_box_lines(doc, chart, pos)):
-        base = (
+    lines = _box_lines(doc, chart, pos)
+    spouse_row = 3 if pos == 1 and geom.root_spouse else -1
+    x = x0 + geom.inset_left
+    # The detail lines' labels sit at the left and their values (dates and places) all
+    # start in one column, just right of the box's widest label, but no farther than
+    # halfway across.
+    space = text_width(" ", fonts.serif, geom.size)
+
+    def detail_font(line: BoxLine) -> str:
+        return fonts.serif_bold if line.bold else fonts.serif
+
+    col = min(
+        max(
+            (
+                text_width(line.label, detail_font(line), geom.size) + space
+                for i, line in enumerate(lines)
+                if i and i != spouse_row and line.label
+            ),
+            default=0.0,
+        ),
+        geom.text_w / 2,
+    )
+    for i, line in enumerate(lines):
+        base = geom.y(
             top
             + geom.name_base
             + (geom.detail_gap + geom.leading * (i - 1) if i else 0)
         )
-        if pos == 1 and geom.root_spouse and i == 3:
-            _draw_spouse_line(c, doc, line, x0 + geom.inset_left, geom.y(base))
+        if i == spouse_row:
+            _draw_spouse_line(c, doc, line, x, base)
             continue
-        font = fonts.sans if i == 0 else fonts.serif
-        # the name line makes room for the record ID
-        room = geom.text_w - id_room if i == 0 else geom.text_w
-        text = line.text
-        if line.is_place and line.value and opts.shorten_places:
+        if i == 0:
+            # the name line makes room for the record ID
+            text, scale = fit_squeezed_noted(
+                line.label,
+                line.note,
+                fonts.sans,
+                geom.size,
+                geom.text_w - id_room,
+                ellipsis,
+            )
+            draw_text(c, x, base, text, fonts.sans, geom.size, scale)
+            continue
+        font = detail_font(line)
+        if line.label:
+            label, scale = fit_squeezed(
+                line.label, font, geom.size, max(0.0, col - space), ellipsis
+            )
+            draw_text(c, x, base, label, font, geom.size, scale)
+        if not line.value:
+            continue
+        room = geom.text_w - col
+        text = line.value
+        if line.is_place and opts.shorten_places:
 
             def fits(t: str, font: str = font, room: float = room) -> bool:
                 return text_width(t, font, geom.size) <= room / SQUEEZE
 
-            text = shorten_place_line(line.label, line.value, doc.home, fits, ellipsis)
-        text, scale = fit_squeezed_noted(
-            text, line.note, font, geom.size, room, ellipsis
-        )
-        draw_text(c, x0 + geom.inset_left, geom.y(base), text, font, geom.size, scale)
+            text = shorten_place_line("", text, doc.home, fits, ellipsis)
+        text, scale = fit_squeezed(text, font, geom.size, room, ellipsis)
+        draw_text(c, x + col, base, text, font, geom.size, scale)
     if record:
         # Reportlab's Font stubs omit the face attribute.
         face = getFont(fonts.sans).face  # type: ignore[attr-defined]
@@ -1467,15 +1574,7 @@ def _draw_box_text(c: canvas.Canvas, doc: _Doc, chart: Chart, pos: int) -> None:
         if pos >= geom.first_right and pos % 2
         else top + geom.name_base
     )
-    draw_text(
-        c,
-        x0 - geom.box_number_gap,
-        geom.y(number_y),
-        str(pos),
-        fonts.bold,
-        geom.size,
-        right=True,
-    )
+    _draw_box_number(c, doc, pos, x0, number_y)
     if pos in chart.continuations:  # chart where this ancestor continues
         _draw_continuation(
             c,
@@ -1484,6 +1583,185 @@ def _draw_box_text(c: canvas.Canvas, doc: _Doc, chart: Chart, pos: int) -> None:
             geom.y(top + h / 2 + geom.continuation_drop),
             str(chart.continuations[pos]),
         )
+
+
+# --------------------------------------------------------------------------
+# Family charts: box 1 holds all the children of a couple
+# --------------------------------------------------------------------------
+
+# The children's box takes the band of the page where an ordinary chart has box 1, the
+# only free place left of the parents' boxes (the other boxes of the left zone overlap
+# it sideways). It keeps this much clear above and below, scaled with the print size.
+FAMILY_MARGIN = 6
+# one child per line; the type shrinks to no less than this share of its size to fit
+# more, after which a second column takes over
+FAMILY_MIN_SCALE = 0.8
+# two columns are each half the width: their type is no larger than this, so that a
+# name and its years fit side by side
+FAMILY_COLUMNS_SCALE = 0.8
+FAMILY_MAX_COLS = 2
+FAMILY_COL_GAP = 8  # between two columns, scaled with the print size
+
+
+class FamilyLayout(NamedTuple):
+    """How a family chart's box 1 is set: `cols` columns of up to `rows` children, the
+    type at `scale` of its size, the lines `leading` of their usual spacing apart, and
+    the box's height."""
+
+    cols: int
+    rows: int
+    scale: float
+    leading: float
+    height: float
+
+
+def _family_band(geom: PageGeom) -> tuple[float, float]:
+    """(top, bottom) of the room for a family chart's box 1: between the boxes that
+    neighbor box 1 in the left zone (see _box_tops), less FAMILY_MARGIN each side."""
+    above, below = (2, 3) if geom.large_print else (5, 6)
+    margin = FAMILY_MARGIN * geom.scale
+    return (
+        geom.box_top[above] + geom.h(above) + margin,
+        geom.box_top[below] - margin,
+    )
+
+
+def family_layout(geom: PageGeom, children: int) -> FamilyLayout:
+    """The layout of `children` names in a family chart's box 1: one column at full size
+    if it fits, else one column shrunk (type and spacing, to FAMILY_MIN_SCALE), else two
+    columns of smaller type (FAMILY_COLUMNS_SCALE) with the spacing tightened only as
+    far as they need. A ValueError says how many children the page holds.
+    """
+    top, bottom = _family_band(geom)
+    room = bottom - top
+
+    def need(rows: int, scale: float, leading: float) -> float:
+        lines = NAME_BASE + BOTTOM_PAD
+        return (lines * scale + (rows - 1) * LEADING * leading) * geom.scale
+
+    rows = children
+    scale = min(1.0, room / need(rows, 1.0, 1.0))
+    if scale >= FAMILY_MIN_SCALE:
+        return FamilyLayout(1, rows, scale, scale, need(rows, scale, scale))
+    scale = FAMILY_COLUMNS_SCALE
+    for cols in range(2, FAMILY_MAX_COLS + 1):
+        rows = -(-children // cols)
+        if need(rows, scale, 1.0) <= room:
+            return FamilyLayout(cols, rows, scale, 1.0, need(rows, scale, 1.0))
+        # rows > 1 here: one row fits any band
+        leading = (room / geom.scale - (NAME_BASE + BOTTOM_PAD) * scale) / (
+            (rows - 1) * LEADING
+        )
+        if leading >= FAMILY_MIN_SCALE:
+            return FamilyLayout(cols, rows, scale, leading, need(rows, scale, leading))
+    most = int(
+        (room / geom.scale - (NAME_BASE + BOTTOM_PAD) * scale)
+        // (FAMILY_MIN_SCALE * LEADING)
+        + 1
+    )
+    raise ValueError(
+        f"a family chart holds at most {most * FAMILY_MAX_COLS} children in "
+        f"{'large' if geom.large_print else 'normal'} print; this family has {children}"
+        + ("" if geom.large_print else " (large print holds more)")
+    )
+
+
+def _child_years(p: Person, doc: _Doc) -> str:
+    """ "1851-1923", "1851-" or "-1923": the years of a child's birth and death (a
+    christening, burial or cremation standing in), "" for neither."""
+    birth, _ = birth_source(p, doc.opts.event_standins)
+    death, _ = death_source(p, doc.opts.event_standins)
+    born, died = year_of(birth.date), year_of(death.date)
+    return f"{born or ''}\u2013{died or ''}" if born or died else ""
+
+
+def _draw_family_box(
+    c: canvas.Canvas, doc: _Doc, chart: Chart, layout: FamilyLayout
+) -> None:
+    """Box 1 of a family chart: one line per child, in family order, the name with the
+    relationship note (adopted, foster) and, after it, the years of birth and death
+    ("1923\u20132017"). A child who may be living is hidden under
+    exclude_private as in any box. The box number sits left of it."""
+    tree, opts, fonts, strings = doc.tree, doc.opts, doc.fonts, doc.drawable_strings
+    geom = doc.geom
+    ellipsis = strings["ellipsis"]
+    cols, rows, scale, leading, _ = layout
+    size = geom.size * scale
+    x0, top = geom.box_x0[1], geom.box_top[1]
+    gap = FAMILY_COL_GAP * geom.scale
+    col_w = (geom.text_w - gap * (cols - 1)) / cols
+    # (column, row, name, note, years) of every child
+    entries = []
+    for i, pid in enumerate(chart.children):
+        p = tree.people[pid]
+        hide = opts.exclude_private and doc.is_living(pid)
+        relationship = tree.parent_relationship(pid, opts.parents)
+        note = (
+            ""
+            if hide or relationship == "birth"
+            else fonts.clean(strings["relationship"][relationship])
+        )
+        name = (
+            strings["living_name"]
+            if hide
+            else fonts.clean(display_name(p, opts.preserve_case, doc.rules))
+        )
+        years = "" if hide else fonts.clean(_child_years(p, doc))
+        entries.append((*divmod(i, rows), name, note, years))
+    # One column lines the years up after the names, if every line fits with its
+    # widest name and at most the usual squeeze; otherwise, and always with several
+    # columns, at the column's right edge.
+    widest_name = max(
+        (
+            text_width(e[2] + (" " + e[3] if e[3] else ""), fonts.sans, size)
+            for e in entries
+        ),
+        default=0.0,
+    )
+    years_w = max((text_width(e[4], fonts.sans, size) for e in entries), default=0.0)
+    after_names = cols == 1 and widest_name + size + years_w <= col_w / SQUEEZE
+    # The years take their widest, and the names keep the rest, but not less than 45%
+    # of the column.
+    name_room = max(0.45 * col_w, col_w - years_w - size) if years_w else col_w
+    drawn = []
+    for col, row, name, note, dates in entries:
+        text, text_scale = fit_squeezed_noted(
+            name, note, fonts.sans, size, name_room, ellipsis
+        )
+        drawn.append((col, row, text, text_scale, dates))
+    # one column: the years line up after the longest name; otherwise at the column's
+    # right edge
+    name_w = max(
+        (text_width(e[2], fonts.sans, size) * e[3] for e in drawn), default=0.0
+    )
+    for col, row, text, text_scale, dates in drawn:
+        x = x0 + geom.inset_left + col * (col_w + gap)
+        base = geom.y(top + (NAME_BASE * scale + row * LEADING * leading) * geom.scale)
+        draw_text(c, x, base, text, fonts.sans, size, text_scale)
+        if not dates:
+            continue
+        if after_names:
+            start = x + name_w + size
+            rest, rest_scale = fit_squeezed(
+                dates, fonts.sans, size, max(0.0, x + col_w - start), ellipsis
+            )
+            draw_text(c, start, base, rest, fonts.sans, size, rest_scale)
+        else:
+            draw_text(c, x + col_w, base, dates, fonts.sans, size, right=True)
+    _draw_box_number(c, doc, 1, x0, top + geom.name_base)
+
+
+def _draw_box_number(
+    c: canvas.Canvas, doc: _Doc, pos: int, x0: float, top: float
+) -> None:
+    """A box's number, with the --prefix before it ("D-13"), ending just left of the
+    box (x0 its left edge) on the layout baseline `top`. One that would come nearer
+    than NUMBER_EDGE to the page's left edge is squeezed (to half width at most)."""
+    fonts, geom = doc.fonts, doc.geom
+    text = fonts.clean(doc.opts.prefix or "") + str(pos)
+    right = x0 - geom.box_number_gap
+    scale = _squeeze_scale(right - NUMBER_EDGE, text_width(text, fonts.bold, geom.size))
+    draw_text(c, right, geom.y(top), text, fonts.bold, geom.size, scale, right=True)
 
 
 def _chart_label(doc: _Doc, number: int) -> str:
@@ -1524,7 +1802,22 @@ def _draw_chart(
 ) -> None:
     """One chart page. `blank` is the sheet render_blank makes: an empty chart without
     its 'Chart N' label."""
-    if not chart.via:
+    layout: FamilyLayout | None = None
+    if chart.family:
+        # The children's box fills the band where an ordinary chart has its root.
+        layout = family_layout(doc.geom, len(chart.children))
+        band_top, band_bottom = _family_band(doc.geom)
+        tops = dict(doc.geom.box_top)
+        tops[1] = (band_top + band_bottom - layout.height) / 2
+        doc = replace(
+            doc,
+            geom=replace(
+                doc.geom,
+                box_top=MappingProxyType(tops),
+                root_height=layout.height,
+            ),
+        )
+    elif not chart.via:
         # Center the enlarged root between its neighboring left-zone boxes.
         geom = doc.geom
         above, below = (2, 3) if geom.large_print else (5, 6)
@@ -1559,6 +1852,7 @@ def _draw_chart(
         subtitle,
         page_number,
         subtitle_right=geom.box_x0[geom.first_right] - SUBTITLE_CLEARANCE,
+        header=opts.header,
     )
     _connectors(c, functools.partial(_shown, chart, empty_boxes=opts.empty_boxes), geom)
 
@@ -1570,7 +1864,10 @@ def _draw_chart(
         _draw_box_outline(c, geom, pos, opts.shadow)
     c.setFillColorRGB(0, 0, 0)
     for pos in boxes:
-        _draw_box_text(c, doc, chart, pos)
+        if layout and pos == 1:
+            _draw_family_box(c, doc, chart, layout)
+        else:
+            _draw_box_text(c, doc, chart, pos)
     c.showPage()
 
 
@@ -1607,6 +1904,9 @@ def build_index(
         for pos in sorted(chart.drawn):
             if pid := chart.slots[pos]:
                 where.setdefault(pid, []).append((chart.number, pos))
+        # a family chart's children share box 1
+        for pid in chart.children:
+            where.setdefault(pid, []).append((chart.number, 1))
 
     rules = SortRules(strings.get("sort", {}))
     index = strings["index"]
@@ -1841,6 +2141,17 @@ class Options:
     # --root-family: one initial-root spouse family; None keeps the first FAMS.
     # It does not choose ancestors or affect continuation roots or the index.
     root_family: str | None = None
+    # --no-marriage: False leaves out the marriage date and place lines, and the root's
+    # and fathers' boxes shrink to the mothers' size
+    marriages: bool = True
+    # --emigration: True adds an emigration date line after the marriage, and makes
+    # every box a line taller, if anyone drawn has an emigration date
+    emigration: bool = False
+    # --no-header: False leaves the chart pages' title, chart label, rule and note off
+    # (the index keeps its own heading)
+    header: bool = True
+    # --prefix: text before every box number ("D-" draws "D-13"); None for none
+    prefix: str | None = None
 
     @property
     def parents(self) -> str:
@@ -1923,14 +2234,20 @@ def _living_check(
     # Estimates come from the whole pedigree, not only the drawn boxes, so a limited
     # render gives every drawn person the status they have in an unlimited run (a deeper
     # appearance can hold a dated descendant)
-    # box 1 of chart 1 holds the root person: planning never leaves it empty
-    whole = plan_charts(
-        tree,
-        charts[0].slots[1],  # type: ignore[arg-type]
-        None,
-        opts.parents,
-        opts.large_print,
-    )
+    # box 1 of chart 1 holds the root person: planning never leaves it empty, unless the
+    # chart is rooted at a family, whose children share it
+    if charts[0].family:
+        whole = plan_family_charts(
+            tree, charts[0].family, None, opts.parents, opts.large_print
+        )
+    else:
+        whole = plan_charts(
+            tree,
+            charts[0].slots[1],  # type: ignore[arg-type]
+            None,
+            opts.parents,
+            opts.large_print,
+        )
     return living_checker(tree, whole, this_year)
 
 
@@ -1974,6 +2291,30 @@ def render_with_counts(
     )
 
 
+def render_family(tree: Tree, family: str, options: Options | None = None) -> bytes:
+    """The cascading pedigree of the children of the family `family` (an id in
+    `tree.families`) as PDF bytes: their ancestry as one pedigree, with all the children
+    together in box 1 and the couple above them. See plan_family_charts. An unknown
+    family is a KeyError; a family with no drawable children, or more children than the
+    page holds, a ValueError.
+    """
+    return render_family_with_counts(tree, family, options).pdf
+
+
+def render_family_with_counts(
+    tree: Tree, family: str, options: Options | None = None
+) -> Rendered:
+    """What render_family does, with the page counts (see render_with_counts)."""
+    opts = options or Options()
+    return _draw_document(
+        plan_family_charts(
+            tree, family, opts.generations, opts.parents, opts.large_print
+        ),
+        tree,
+        opts,
+    )
+
+
 def render_pdf(
     charts: list[Chart], tree: Tree, options: Options | None = None
 ) -> bytes:
@@ -1984,15 +2325,40 @@ def render_pdf(
     return _draw_document(charts, tree, options or Options()).pdf
 
 
+def _any_emigration(
+    tree: Tree, charts: list[Chart], is_living: Callable[[str | None], bool]
+) -> bool:
+    """Whether any box of the charts draws an emigration date: someone shown, not
+    hidden for privacy, whose emigration record has a date."""
+    return any(
+        (p := tree.people.get(pid)) is not None
+        and p.emigration is not None
+        and p.emigration.date is not None
+        and not is_living(pid)
+        for chart in charts
+        for pid in chart.slots.values()
+        if pid
+    )
+
+
 def _draw_document(charts: list[Chart], tree: Tree, opts: Options) -> Rendered:
     """Draw planned charts, and the index, as a PDF."""
     if not charts:
         raise ValueError("no charts to draw: plan_charts makes at least one")
-    root = tree.people[charts[0].slots[1]]  # type: ignore[index]
-    family = _root_family(tree, root, opts.root_family)
-    if opts.root_family is not None and family is not None:
-        opts = replace(opts, root_family=family.id)
-    geom = page_geom(opts.paper, opts.large_print, opts.shadow)
+    if charts[0].family is None:
+        root = tree.people[charts[0].slots[1]]  # type: ignore[index]
+        family = _root_family(tree, root, opts.root_family)
+        if opts.root_family is not None and family is not None:
+            opts = replace(opts, root_family=family.id)
+    today = opts.today or datetime.date.today()
+    is_living = _living_check(tree, charts, opts, today.year)
+    geom = page_geom(
+        opts.paper,
+        opts.large_print,
+        opts.shadow,
+        opts.marriages,
+        opts.emigration and _any_emigration(tree, charts, is_living),
+    )
     for chart in charts:
         if chart.depth != geom.gens:
             raise ValueError(
@@ -2005,14 +2371,13 @@ def _draw_document(charts: list[Chart], tree: Tree, opts: Options) -> Rendered:
                 f"adoptive_parents={opts.adoptive_parents} draws {opts.parents!r}: plan the "
                 "charts with the same parents"
             )
-    today = opts.today or datetime.date.today()
     raw_strings, title, fonts, drawable_strings = _language(opts)
     doc = _Doc(
         tree,
         opts,
         fonts,
         drawable_strings,
-        _living_check(tree, charts, opts, today.year),
+        is_living,
         geom,
         fonts.clean(footer)
         if (footer := footer_text(opts.footer, raw_strings, today)) is not None
@@ -2023,13 +2388,24 @@ def _draw_document(charts: list[Chart], tree: Tree, opts: Options) -> Rendered:
         # the country count so it cannot change ancestor or continuation text.
         place_context = replace(doc, opts=replace(opts, root_family=None))
         doc = replace(doc, home=home_country(_drawn_places(place_context, charts)))
-    # box 1 of chart 1 holds the root person: planning never leaves it empty
-    root = tree.people[charts[0].slots[1]]  # type: ignore[index]
-    root_name = (
-        raw_strings["living_name"]
-        if doc.is_living(root.id)
-        else display_name(root, opts.preserve_case, doc.rules)
-    )
+
+    def person_name(pid: str) -> str:
+        return (
+            raw_strings["living_name"]
+            if doc.is_living(pid)
+            else display_name(tree.people[pid], opts.preserve_case, doc.rules)
+        )
+
+    if first := charts[0].family:
+        # a family chart is named for the couple whose children share box 1
+        couple = [pid for pid in (charts[0].slots[2], charts[0].slots[3]) if pid]
+        if not couple:  # no parents drawn (one generation): the family's own
+            fam = tree.families[first]
+            couple = [pid for pid in (fam.father, fam.mother) if pid in tree.people]
+        root_name = " & ".join(person_name(pid) for pid in couple) or first
+    else:
+        # box 1 of chart 1 holds the root person: planning never leaves it empty
+        root_name = person_name(charts[0].slots[1])  # type: ignore[arg-type]
     buf, c = new_canvas(geom.width, geom.height, opts.compress, fonts)
     document_title = fill(
         raw_strings["meta_title"],
@@ -2081,13 +2457,13 @@ def _draw_document(charts: list[Chart], tree: Tree, opts: Options) -> Rendered:
 def render_blank(options: Options | None = None) -> bytes:
     """One blank chart to fill in by hand, as PDF bytes (--blank): one page with the
     title, the numbered boxes of chart 1 (1-15, or 1-7 in large print) and their lines,
-    laid out as chart 1 is. Each box holds the labels to write after (b., bp., d., dp.,
-    and m., mp. on box 1 and the fathers' boxes) under an empty name line. The root
+    laid out as chart 1 is. Each box holds the labels to write after (birth:, death:,
+    and marriage: on box 1 and the fathers' boxes) under an empty name line. The root
     also has a spouse line. There is no chart label, page number, note, continuation
     or record ID, and the footer is the language's footer_blank, without the date.
 
-    Needs no tree. Respects paper, large_print, shadow, lang, title, footer, fonts and
-    compress; every other option has nothing to apply to and is ignored."""
+    Needs no tree. Respects paper, large_print, shadow, lang, title, header, prefix,
+    footer, fonts and compress; every other option has nothing to apply to and is ignored."""
     # all the boxes, whatever empty_boxes says
     opts = replace(options or Options(), empty_boxes=True)
     geom = page_geom(opts.paper, opts.large_print, opts.shadow)

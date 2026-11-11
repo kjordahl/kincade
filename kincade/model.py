@@ -311,6 +311,7 @@ class Person:
     christenings: list[Event] = field(default_factory=list)
     burials: list[Event] = field(default_factory=list)
     cremations: list[Event] = field(default_factory=list)
+    emigration: Event | None = None  # the first emigration record (EMIG), if any
     parents: list[ParentLink] = field(default_factory=list)  # in source order
     # the families where the person is a parent, in order
     families: list[str] = field(default_factory=list)

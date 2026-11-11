@@ -288,10 +288,10 @@
       if (key === "generations") {
         settings[key] = chart === "pedigree" ? pedigreeGenerations() : Number(control.value);
       } else if (control.type === "checkbox") {
-        settings[key] = ["empty_boxes", "preserve_case"].includes(key) ? !control.checked : control.checked;
+        settings[key] = ["empty_boxes", "marriages", "preserve_case"].includes(key) ? !control.checked : control.checked;
       } else if (key === "root_family") {
         settings[key] = rootFamily || null;
-      } else if (key === "title") {
+      } else if (key === "title" || key === "prefix") {
         settings[key] = control.value === "" ? null : control.value;
       } else {
         settings[key] = control.value;

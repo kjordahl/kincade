@@ -24,6 +24,7 @@ from .charts import (
     living_checker,
     nobody_living,
     plan_charts,
+    plan_family_charts,
 )
 from .fan import Fan
 from .fanpdf import FAN_PAPER, INKS, FanOptions, render_fan
@@ -43,7 +44,13 @@ from .lang import (
     year_of,
 )
 from .model import Person, Tree, squash
-from .pdf import Options, Rendered, render_blank, render_with_counts
+from .pdf import (
+    Options,
+    Rendered,
+    render_blank,
+    render_family_with_counts,
+    render_with_counts,
+)
 
 
 def _fold(text: str) -> str:
@@ -67,6 +74,17 @@ def find_people(tree: Tree, text: str) -> list[Person]:
         return same
     needle = _fold(key)
     return [p for p in tree.people.values() if needle in _fold(display_name(p))]
+
+
+def find_family(tree: Tree, text: str) -> str | None:
+    """The id of the family `text` names (--family): a record ID, with or without the
+    @s and ignoring case, or None."""
+    key = text.strip()
+    for cand in (key, key.strip("@")):
+        if cand in tree.families:
+            return cand
+    folded = _fold(key.strip("@"))
+    return next((fid for fid in tree.families if _fold(fid) == folded), None)
 
 
 def default_output_name(
@@ -119,6 +137,34 @@ def output_root_name(
     return display_name(tree.people[root], preserve_case=True)
 
 
+def output_family_name(
+    tree: Tree,
+    family: str,
+    *,
+    exclude_private: bool = False,
+    adoptive_parents: bool = False,
+    large_print: bool = False,
+    living_name: str = "Living",
+) -> str:
+    """The recorded-case names of a family chart's couple for a filename, 'Jane DOE &
+    John ROE': the parents the chart draws, concealing any who may be living."""
+    parents = "adoptive" if adoptive_parents else "birth"
+    charts = plan_family_charts(tree, family, None, parents, large_print)
+    living = (
+        living_checker(tree, charts, datetime.date.today().year)
+        if exclude_private
+        else nobody_living
+    )
+    couple = [pid for pid in (charts[0].slots[2], charts[0].slots[3]) if pid]
+    names = [
+        living_name
+        if living(pid)
+        else display_name(tree.people[pid], preserve_case=True)
+        for pid in couple
+    ]
+    return " & ".join(names) or family
+
+
 def _output_stem(root_name: str) -> str:
     """A safe name, at most 100 characters and 200 UTF-8 bytes."""
     stem = _safe_text(root_name)[:100].rstrip(". ")
@@ -151,7 +197,7 @@ _NOT_SETTINGS = frozenset(
     {"help", "config", "no_config", "show_config", "blank", "find"}
 )
 # a setting of one replaces the other from an earlier layer
-_EXCLUSIVE = (("footer", "no_footer"),)
+_EXCLUSIVE = (("footer", "no_footer"), ("root", "family"))
 _MINIMUM = {"generations": 1}
 # settings that are paths: no NUL, and ~ is the home folder
 _PATH_KEYS = ("gedcom", "output", "lang")
@@ -214,6 +260,7 @@ class _HelpFormatter(argparse.HelpFormatter):
 USAGE = (
     "kincade FILE.ged --root PERSON [options]\n"
     "       kincade FILE.ged --root PERSON --fan [options]\n"
+    "       kincade FILE.ged --family FAMILY [options]\n"
     "       kincade FILE.ged --find TEXT [options]\n"
     "       kincade --blank [options]\n"
     "       kincade --show-config [options]"
@@ -231,6 +278,7 @@ def _parser(suppress_defaults: bool = False) -> argparse.ArgumentParser:
         formatter_class=_HelpFormatter,
         description="Make a cascading pedigree PDF from a GEDCOM file: chart 1 for the root person, a further chart "
         "wherever a line runs past the last column, and a name index at the end.\n"
+        "With --family, chart 1 is rooted at a family instead: all the couple's children share its first box.\n"
         "With --fan, make a fan chart on one landscape page.",
         epilog="Example:\n"
         "  uv run kincade docs/examples/george-washington.ged \\\n"
@@ -262,17 +310,24 @@ def _parser(suppress_defaults: bool = False) -> argparse.ArgumentParser:
         add(container, flag, action="store_true", help=text)
 
     add(person, "file", metavar="FILE.ged", nargs="?", help="GEDCOM file to read")
+    root_group = person.add_mutually_exclusive_group()
     add(
-        person,
+        root_group,
         "--root",
         metavar="PERSON",
         help="person at the head of chart 1: a record ID (I12) or part of a name",
     )
     add(
+        root_group,
+        "--family",
+        metavar="FAMILY",
+        help="family record ID (F2): chart 1 holds all the couple's children together in its first box, with the couple and their ancestors above (pedigree only)",
+    )
+    add(
         person,
         "--root-family",
         metavar="FAMILY",
-        help="family record ID for the root's spouse and marriage (default: first spouse family; pedigree only)",
+        help="family record ID for the root's spouse and marriage (default: first spouse family; pedigree only; not with --family)",
     )
     add(
         person,
@@ -312,6 +367,16 @@ def _parser(suppress_defaults: bool = False) -> argparse.ArgumentParser:
         content,
         "--no-event-standins",
         "show only births and deaths; privacy still uses christenings, baptisms, burials and cremations",
+    )
+    toggle(
+        content,
+        "--no-marriage",
+        "leave out the marriage date and place lines (pedigree only)",
+    )
+    toggle(
+        content,
+        "--emigration",
+        "add an emigration date line; every box grows a line when anyone shown has one (pedigree only)",
     )
     toggle(
         content,
@@ -373,6 +438,12 @@ def _parser(suppress_defaults: bool = False) -> argparse.ArgumentParser:
         metavar="TEXT",
         help="page title (default: chart title and root's name)",
     )
+    add(
+        page,
+        "--prefix",
+        metavar="TEXT",
+        help='text before every box number: "D-" numbers the boxes D-1, D-2, ... (pedigree only)',
+    )
     footer_group = page.add_mutually_exclusive_group()
     add(
         footer_group,
@@ -382,6 +453,11 @@ def _parser(suppress_defaults: bool = False) -> argparse.ArgumentParser:
     )
     toggle(footer_group, "--no-footer", "leave out the footer")
     toggle(page, "--no-page-numbers", "leave out the page numbers (pedigree only)")
+    toggle(
+        page,
+        "--no-header",
+        "leave out the chart pages' title, chart number, rule and note (pedigree only)",
+    )
     add(
         page,
         "--blank",
@@ -534,6 +610,8 @@ def _read_settings(path: Path, keys: Mapping[str, argparse.Action]) -> dict[str,
             settings[keys[key].dest] = value
     if "footer" in settings and settings.get("no_footer") is True:
         raise ConfigError(f"{where}: footer and no_footer cannot both be set")
+    if "root" in settings and "family" in settings:
+        raise ConfigError(f"{where}: root and family cannot both be set")
     return settings
 
 
@@ -558,14 +636,19 @@ def _merge(
 
 
 _PEDIGREE_ONLY = (
+    "family",
     "root_family",
     "no_index",
     "large_print",
     "shadow",
     "show_ids",
     "no_empty",
+    "no_marriage",
+    "emigration",
     "no_shorten_places",
     "no_page_numbers",
+    "no_header",
+    "prefix",
 )
 
 
@@ -606,6 +689,11 @@ def _mode_settings(
         if "ink" in given:
             ap.error("--ink is for the fan chart only")
         ignored.append("ink")
+        if settings["family"]:
+            # the root's spouse family has no meaning for a family chart
+            if "root_family" in given:
+                ap.error("--root-family cannot be used with --family")
+            ignored.append("root_family")
         if settings["paper"] in ("tabloid", "a3"):
             if "paper" in given:
                 ap.error("--paper tabloid and --paper a3 are for the fan chart only")
@@ -761,6 +849,8 @@ def _options(
         preserve_case=args.preserve_case,
         paper=args.paper,
         lang=strings,
+        header=not args.no_header,
+        prefix=args.prefix,
         **more,
     )
 
@@ -926,6 +1016,9 @@ def _make_pedigree(args: argparse.Namespace, find: str | None) -> int:
                 print(line)
         return 0
 
+    if args.family:
+        return _make_family(args, tree, strings, standins)
+
     matches = find_people(tree, args.root)
     exact = [p for p in matches if _fold(display_name(p)) == _fold(args.root)]
     if len(exact) == 1:
@@ -961,6 +1054,8 @@ def _make_pedigree(args: argparse.Namespace, find: str | None) -> int:
         shorten_places=not args.no_shorten_places,
         show_ids=args.show_ids,
         empty_boxes=not args.no_empty,
+        marriages=not args.no_marriage,
+        emigration=args.emigration,
         adoptive_parents=args.adoptive_parents,
         index=not args.no_index,
         exclude_private=args.exclude_private,
@@ -986,6 +1081,50 @@ def _make_pedigree(args: argparse.Namespace, find: str | None) -> int:
     )
     summary = pedigree_summary(rendered)
     return _write_pdf(out, rendered.pdf, summary)
+
+
+def _make_family(
+    args: argparse.Namespace, tree: Tree, strings: Mapping[str, Any], standins: bool
+) -> int:
+    """--family: the pedigree of the children of one family, with the couple and their
+    ancestry above them."""
+    family = find_family(tree, args.family)
+    if family is None:
+        return _fail(f"no family matches {args.family!r}")
+    opts = _options(
+        args,
+        strings,
+        generations=args.generations,
+        page_numbers=not args.no_page_numbers,
+        shorten_places=not args.no_shorten_places,
+        show_ids=args.show_ids,
+        empty_boxes=not args.no_empty,
+        marriages=not args.no_marriage,
+        emigration=args.emigration,
+        adoptive_parents=args.adoptive_parents,
+        index=not args.no_index,
+        exclude_private=args.exclude_private,
+        event_standins=standins,
+    )
+    try:
+        rendered = render_family_with_counts(tree, family, opts)
+    except ValueError as e:
+        return _fail(e, 2)
+    out = Path(
+        args.output
+        or default_output_name(
+            output_family_name(
+                tree,
+                family,
+                exclude_private=args.exclude_private,
+                adoptive_parents=args.adoptive_parents,
+                large_print=args.large_print,
+                living_name=strings["living_name"],
+            ),
+            strings,
+        )
+    )
+    return _write_pdf(out, rendered.pdf, pedigree_summary(rendered))
 
 
 def _make_fan(
@@ -1083,8 +1222,8 @@ def _main(argv: list[str] | None = None) -> int:
         ap.error(
             "FILE.ged is required (or set gedcom in a config file; see --show-config)"
         )
-    if find is None and not args.root:
-        ap.error("--root is required (or use --find TEXT)")
+    if find is None and not (args.root or args.family):
+        ap.error("--root or --family is required (or use --find TEXT)")
     if args.generations is not None and args.generations < 1:
         ap.error("--generations must be at least 1")
     return _make_pedigree(args, find)

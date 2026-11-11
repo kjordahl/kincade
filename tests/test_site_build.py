@@ -34,10 +34,14 @@ PAGE_DEFAULTS = {
         "adoptive_parents": False,
         "event_standins": True,
         "empty_boxes": True,
+        "marriages": True,
+        "emigration": False,
         "show_ids": False,
         "shorten_places": True,
         "index": True,
         "page_numbers": True,
+        "header": True,
+        "prefix": None,
         "footer": None,
         "title": None,
         "paper": "letter",
@@ -358,6 +362,8 @@ def test_the_page_controls_map_to_the_worker_options():
             ("ink", fan): 1,
             ("exclude_private", both): 1,
             ("empty_boxes", pedigree): 1,
+            ("marriages", pedigree): 1,
+            ("emigration", pedigree): 1,
             ("show_ids", pedigree): 1,
             ("preserve_case", both): 1,
             ("adoptive_parents", both): 1,
@@ -367,6 +373,8 @@ def test_the_page_controls_map_to_the_worker_options():
             ("root_family", pedigree): 1,
             ("footer", both): 2,
             ("page_numbers", pedigree): 1,
+            ("header", pedigree): 1,
+            ("prefix", pedigree): 1,
             ("index", pedigree): 1,
             ("lang", both): 1,
         }
@@ -414,7 +422,7 @@ def test_the_page_controls_map_to_the_worker_options():
         (str(n), n == 6) for n in range(2, 8)
     ]
 
-    # Control defaults equal the library defaults, with empty_boxes and
+    # Control defaults equal the library defaults, with empty_boxes, marriages and
     # preserve_case inverted as app.js's settingsSnapshot does.
     for chart, expected_defaults in PAGE_DEFAULTS.items():
         actual_defaults = {}
@@ -440,7 +448,7 @@ def test_the_page_controls_map_to_the_worker_options():
             elif attrs["type"] == "checkbox":
                 actual_defaults[key] = (
                     ("checked" not in attrs)
-                    if key in {"empty_boxes", "preserve_case"}
+                    if key in {"empty_boxes", "marriages", "preserve_case"}
                     else ("checked" in attrs)
                 )
             else:

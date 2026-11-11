@@ -105,10 +105,14 @@ PEDIGREE_DEFAULTS = {
     "adoptive_parents": False,
     "event_standins": True,
     "empty_boxes": True,
+    "marriages": True,
+    "emigration": False,
     "show_ids": False,
     "shorten_places": True,
     "index": True,
     "page_numbers": True,
+    "header": True,
+    "prefix": None,
     "footer": None,
     "title": None,
     "paper": "letter",
@@ -203,7 +207,7 @@ def test_open_search_metadata_render_round_trip(dispatch, frozen_today):
         {
             "id": "F101",
             "spouse": "Tom BAKER",
-            "details": ["m. 5 Jun 2005", "mp. Peoria, Illinois"],
+            "details": ["marriage: 5 Jun 2005", "Peoria, Illinois"],
         }
     ]
     context = {
@@ -424,10 +428,14 @@ def test_every_page_key_reaches_the_library(dispatch, chart, frozen_today):
             "adoptive_parents": True,
             "event_standins": False,
             "empty_boxes": False,
+            "marriages": False,
+            "emigration": True,
             "show_ids": True,
             "shorten_places": False,
             "index": False,
             "page_numbers": False,
+            "header": False,
+            "prefix": "D-",
             "footer": "Custom footer",
             "title": "Custom title",
             "paper": "a4",
@@ -641,16 +649,20 @@ def test_root_metadata_families(dispatch):
         {
             "id": "F1",
             "spouse": "First McCLURE",
-            "details": ["m. 1901", "mp. Firsttown"],
+            "details": ["marriage: 1901", "Firsttown"],
         },
         {
             "id": "F2",
             "spouse": "Second DEWITT",
-            "details": ["m. 2022", "mp. Secondtown"],
+            "details": ["marriage: 2022", "Secondtown"],
         },
     ]
     assert families("I2", preserveCase=True) == [
-        {"id": "F1", "spouse": "Root Ashford", "details": ["m. 1901", "mp. Firsttown"]}
+        {
+            "id": "F1",
+            "spouse": "Root Ashford",
+            "details": ["marriage: 1901", "Firsttown"],
+        }
     ]
     assert families("I1", lang="fr")[0] == {
         "id": "F1",
@@ -679,7 +691,7 @@ def test_root_metadata_families(dispatch):
         {
             "id": "F1",
             "spouse": "First McCLURE",
-            "details": ["m. 1901", "mp. Firsttown"],
+            "details": ["marriage: 1901", "Firsttown"],
         },
         {"id": "F2", "spouse": "", "details": []},
     ]
@@ -813,6 +825,7 @@ def test_session_fonts(dispatch, tmp_path, monkeypatch):
         "LiberationSans-Bold.ttf",
         "LiberationSerif-Regular.ttf",
         "LiberationSerif-Italic.ttf",
+        "LiberationSerif-Bold.ttf",
     ):
         (liberation / name).write_bytes(b"")
     assert session.load_fonts(liberation) == "embedded"

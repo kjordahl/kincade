@@ -157,14 +157,14 @@ def test_private_pdfs_hide_the_living(pedigree):
         assert hidden not in pdf, hidden
     # only William's (dead) birth and death places remain
     assert pdf.count(b"Akron, Ohio") == 2
-    assert b"(b.)" in pdf and b"(m.)" in pdf and b"(mp.)" in pdf  # labels stay
-    assert b"(b. 3 Mar 1950)" in pdf  # John is dead: shown
-    assert b"(b. 1 Jun 1900)" in pdf
+    assert b"(birth:)" in pdf and b"(marriage:)" in pdf  # labels stay
+    assert b"(3 Mar 1950)" in pdf  # John is dead: shown
+    assert b"(1 Jun 1900)" in pdf
     assert b"ASHFORD, Jane" not in pdf  # living people are omitted from the index
     # en dash: cp1252 0x96, octal-escaped
     assert b"ASHFORD, John \\(b. 1950 \\226 d. 2020\\), 1-2" in pdf
     without = render(pedigree)
-    assert b"(b. 14 Feb 1980)" in without and b"(m. 12 Jun 1975)" in without
+    assert b"(14 Feb 1980)" in without and b"(12 Jun 1975)" in without
 
     # the record ID is hidden too
     young = read_gedcom(
@@ -382,7 +382,7 @@ def test_the_estimate_walks_birth_links_only():
             assert kincade.charts.living_checker(tree, charts, 2026)("I4") is True
             # without --exclude-private the place is drawn: this is about privacy,
             # not a missing line
-            assert f"bp. {SECRET}" in drawn(render_charts(tree, parents="adoptive"))
+            assert SECRET in drawn(render_charts(tree, parents="adoptive"))
         else:
             # Bob and Beth are drawn; both have their own recorded birth year
             assert est["I2"] == 1920 and est["I3"] == 1922, parents
@@ -622,11 +622,11 @@ def test_person_living_overrides_the_estimate():
     # Bob's birth, death, and marriage (a living spouse) must not be drawn.
     for value in ("1800", "1870", "1820", "Dayton"):
         assert all(value not in line for line in text), value
-    assert "b. 1990" in text and "PELL, Ann (b. 1990), 1-1" in text
+    assert "birth: 1990" in text and "PELL, Ann (b. 1990), 1-1" in text
     assert "Ann PELL" in text and "Bob PELL" not in text
     assert "Living" in text
     assert not any("PELL, Bob" in line for line in text)  # omitted from the index
-    assert "b." in text and "m." in text  # labels stay
+    assert "birth:" in text and "marriage:" in text  # labels stay
 
     # it also decides the index order and index years
     order_tree = with_living(
@@ -669,5 +669,5 @@ def test_person_living_overrides_the_estimate():
         public_tree,
         Options(today=TODAY, fonts="base14", compress=False, exclude_private=False),
     )
-    assert b"(b. 1800)" in public_pdf and b"(m. 1820)" in public_pdf
-    assert b"(b. 1990)" in public_pdf
+    assert b"(1800)" in public_pdf and b"(1820)" in public_pdf
+    assert b"(1990)" in public_pdf

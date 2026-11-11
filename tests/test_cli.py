@@ -45,6 +45,7 @@ def test_the_help(monkeypatch, capsys):
     assert out.startswith(
         "usage: kincade FILE.ged --root PERSON [options]\n"
         "       kincade FILE.ged --root PERSON --fan [options]\n"
+        "       kincade FILE.ged --family FAMILY [options]\n"
         "       kincade FILE.ged --find TEXT [options]\n"
         "       kincade --blank [options]\n"
         "       kincade --show-config [options]\n"
@@ -311,11 +312,11 @@ def test_find_lists_people_and_their_families(tmp_path, capsys):
     assert kincade.cli.main([str(FIX / "pedigree.ged"), "--find", "mcclure"]) == 0
     assert capsys.readouterr().out.splitlines() == [
         "I3\tMary McCLURE\t1952-",
-        "    F1\tJohn ASHFORD\tm. 12 Jun 1975\tmp. Akron, Ohio",
+        "    F1\tJohn ASHFORD\tmarriage: 12 Jun 1975\tAkron, Ohio",
         "I6\tWilliam McCLURE\t1925-1999",
-        "    F3\tAnn BOND\tm. 1950",
+        "    F3\tAnn BOND\tmarriage: 1950",
         "I12\tSamuel McCLURE\t1900-1970",
-        "    F6\tJane BRUCE\tm. 1 Feb 1925",
+        "    F6\tJane BRUCE\tmarriage: 1 Feb 1925",
     ]
 
     unions = tmp_path / "unions.ged"
@@ -363,8 +364,8 @@ def test_find_lists_people_and_their_families(tmp_path, capsys):
     assert kincade.cli.main([str(unions), "--find", "R"]) == 0
     assert capsys.readouterr().out.splitlines() == [
         "R\tRoot VANDYKE\t1700-1780",
-        "    F2\tSecond DEVRIES\tm. 6 Jan 1759\tmp. Other Town\t(default)",
-        "    F1\tFirst McCLURE\tm. 1725\tmp. First Town",
+        "    F2\tSecond DEVRIES\tmarriage: 6 Jan 1759\tOther Town\t(default)",
+        "    F1\tFirst McCLURE\tmarriage: 1725\tFirst Town",
         "    F3\tUnknown spouse",
     ]
 
@@ -372,7 +373,7 @@ def test_find_lists_people_and_their_families(tmp_path, capsys):
         assert kincade.cli.main([str(FIX / "pedigree.ged"), "--find", text]) == 0
         assert capsys.readouterr().out.splitlines() == [
             "I3\tMary McCLURE\t1952-",
-            "    F1\tJohn ASHFORD\tm. 12 Jun 1975\tmp. Akron, Ohio",
+            "    F1\tJohn ASHFORD\tmarriage: 12 Jun 1975\tAkron, Ohio",
         ], text
 
     zoe_nfd = "Zoë"
@@ -836,7 +837,7 @@ def test_root_family_on_the_command_line(tmp_path, capsys, monkeypatch):
         == 0
     )
     text = drawn(out.read_bytes())
-    assert "Mary BALL" in text and "m. 6 Mar 1731" in text
+    assert "Mary BALL" in text and "marriage: 6 Mar 1731" in text
     assert "Jane BUTLER" not in text
 
     out2 = tmp_path / "y.pdf"

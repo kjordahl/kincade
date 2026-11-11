@@ -57,10 +57,11 @@ serves only the two generated files.
 | Kincade | Wheel beside `index.html` | Build manifest filename and SHA-256 |
 | Pyodide, micropip, Pillow, charset-normalizer | `https://cdn.jsdelivr.net/pyodide/v314.0.7/full/` | `PYODIDE_VERSION` in `web/build.py` |
 | reportlab | PyPI metadata at `pypi.org`, wheel at `files.pythonhosted.org`, through micropip | `reportlab==5.0.1`, derived from `uv.lock` |
-| Liberation Sans Regular and Bold; Liberation Serif Regular and Italic | `https://cdn.jsdelivr.net/npm/@betteroffice/fonts@0.4.0/assets/` | Each URL and SHA-256 in `web/fonts.json` |
+| Liberation Sans Regular and Bold; Liberation Serif Regular, Italic and Bold | `https://cdn.jsdelivr.net/npm/@betteroffice/fonts@0.4.0/assets/` | Each URL and SHA-256 in `web/fonts.json` |
 
-The four font assets are byte-identical to Liberation 2.1.5 and use the SIL Open
-Font License 1.1. The page checks their hashes before registering them. If any
+The Sans Regular and Bold and Serif Regular and Italic assets are byte-identical to
+Liberation 2.1.5; Serif Bold (the emigration line) comes from the same pinned package
+release. All use the SIL Open Font License 1.1. The page checks their hashes before registering them. If any
 font is unavailable or does not match, it uses the built-in PDF fonts and names
 that fallback in the PDF summary. Those fonts cover Windows-1252; other
 characters lose accents or become `?`.
@@ -81,9 +82,9 @@ differ, and `tests/test_site_build.py` checks the keys, placeholders and select 
 - **Pyodide:** update `PYODIDE_VERSION` in `web/build.py`. The build derives the
   runtime base URL from that version. Rebuild and rerun automated acceptance below,
   including CSP and plain HTTP.
-- **Fonts:** update the four URLs and SHA-256 values in `web/fonts.json` after
+- **Fonts:** update the five URLs and SHA-256 values in `web/fonts.json` after
   checking the assets against the intended upstream release. Keep the filenames
-  that Kincade uses for its four font roles. `web/build.py` validates the pinned
+  that Kincade uses for its five font roles. `web/build.py` validates the pinned
   `FONT_BASE` and names; an intentional source/version change also updates that
   validation. Rebuild and repeat the embedded-font and fallback checks.
 - **reportlab:** use `uv lock --upgrade-package reportlab` to update `uv.lock`

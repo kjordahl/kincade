@@ -130,32 +130,36 @@ foster = "(foster)"
 # Partner paired with the initial pedigree root's marriage.
 spouse = "spouse:"
 # Box label for the birth date.
-birth = "b."
+birth = "birth:"
 
-# Box label for the birth place.
-birth_place = "bp."
+# Box label for the birth place. Empty: the place is indented to start under the
+# date on the line above.
+birth_place = ""
 
 # Box label for the marriage date (the root and fathers only).
-marriage = "m."
+marriage = "marriage:"
 
 # Box label for the marriage place (the root and fathers only).
-marriage_place = "mp."
+marriage_place = ""
 
 # Box label for the death date.
-death = "d."
+death = "death:"
 
 # Box label for the death place.
-death_place = "dp."
+death_place = ""
 
 # A christening or baptism standing in for the birth, when the birth has no date or
-# place (the labels Xp. are for the place, as above). A burial or a cremation standing
-# in for the death, when the death has neither.
-christening = "chr."
-christening_place = "chrp."
-burial = "bur."
-burial_place = "burp."
-cremation = "crem."
-cremation_place = "cremp."
+# place (the X_place labels are for the place, as above). A burial or a cremation
+# standing in for the death, when the death has neither.
+christening = "christening:"
+christening_place = ""
+burial = "burial:"
+burial_place = ""
+cremation = "cremation:"
+cremation_place = ""
+
+# Box label for the emigration date (--emigration); its place is not drawn.
+emigration = "emigration:"
 
 [dates]
 # GEDCOM ABT, ABOUT, CA, CIRCA and ~ (approximately).

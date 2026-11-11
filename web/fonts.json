@@ -18,5 +18,10 @@
     "name": "LiberationSerif-Italic.ttf",
     "url": "https://cdn.jsdelivr.net/npm/@betteroffice/fonts@0.4.0/assets/LiberationSerif-Italic.ttf",
     "sha256": "0e3dea9f8d613e006ccfa62201f33e265d19167bd0907725c3e145368b04fc2e"
+  },
+  {
+    "name": "LiberationSerif-Bold.ttf",
+    "url": "https://cdn.jsdelivr.net/npm/@betteroffice/fonts@0.4.0/assets/LiberationSerif-Bold.ttf",
+    "sha256": "d754ba427cfe0bca54ae052384baa8f842da5bd6550ad4da024ac441e7a7d5ce"
   }
 ]

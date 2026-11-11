@@ -22,6 +22,7 @@ FONT_NAMES = {
     "LiberationSans-Bold.ttf",
     "LiberationSerif-Regular.ttf",
     "LiberationSerif-Italic.ttf",
+    "LiberationSerif-Bold.ttf",
 }
 FONT_BASE = "https://cdn.jsdelivr.net/npm/@betteroffice/fonts@0.4.0/assets/"
 
@@ -50,14 +51,14 @@ def locked_reportlab(lock_text: str) -> str:
 
 
 def read_fonts() -> list[dict[str, str]]:
-    """Validate the four pinned CDN font objects before embedding them."""
+    """Validate the five pinned CDN font objects before embedding them."""
     path = WEB / "fonts.json"
     try:
         fonts = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         raise SystemExit(f"Invalid fonts.json: {error}") from error
-    message = "fonts.json must contain the four pinned Liberation font objects"
-    if not isinstance(fonts, list) or len(fonts) != 4:
+    message = "fonts.json must contain the five pinned Liberation font objects"
+    if not isinstance(fonts, list) or len(fonts) != len(FONT_NAMES):
         raise SystemExit(message)
     names = set()
     result = []

@@ -84,7 +84,7 @@ Find George Washington in [the example GEDCOM](docs/examples/george-washington.g
 ```console
 $ uv run kincade docs/examples/george-washington.ged --find "George Washington"
 I1	George WASHINGTON	1732-1799
-    F1	Martha DANDRIDGE	m. 6 Jan 1759	mp. New Kent County, Virginia	(default)
+    F1	Martha DANDRIDGE	marriage: 6 Jan 1759	New Kent County, Virginia	(default)
 ```
 
 The person's row lists their record ID, name, and life years. `I1` is George
@@ -172,6 +172,31 @@ Use `--large-print` for larger text and fewer generations per page.
 Long place names are shortened to fit their boxes. `--no-shorten-places` preserves
 more of the original wording, truncating the end when it cannot fit.
 
+## Family chart
+
+`--family` makes a pedigree for a whole family instead of one person: all the
+children of a couple share the first box, with their parents and the ancestry above
+them. It is the ancestry of every sibling on one chart, without choosing a single
+child as the root. Use `--find` to see the family record IDs, then give one to
+`--family` in place of `--root`:
+
+```sh
+uv run kincade docs/examples/george-washington.ged --family F2 -o washington-children.pdf
+```
+
+Each child has one line in the first box, in the order the family lists them, with
+the years of their birth and death ("1923–2017"). A family with many children gets
+smaller type, then a second column; `--large-print` has room for more. A child with adoptive or foster
+parents appears under the family that `--adoptive-parents` selects, as elsewhere in
+the chart, and with `--exclude-private` a child who may be living is hidden as in
+any other box. The file is named for the couple, and the index lists each child at
+box 1 of chart 1.
+
+`--root-family` does not apply, and `--root` and `--fan` cannot be combined with
+`--family`. A family with no children, or with more than the page holds (22 on
+Letter at normal size, 26 on A4), is an error. Through the library, use
+`render_family` or `plan_family_charts`.
+
 ## Fan chart
 
 `--fan` draws a single landscape page with the root person in the center and a
@@ -211,6 +236,7 @@ Kincade's help lists every option with a short explanation:
 $ uv run kincade --help
 usage: kincade FILE.ged --root PERSON [options]
        kincade FILE.ged --root PERSON --fan [options]
+       kincade FILE.ged --family FAMILY [options]
        kincade FILE.ged --find TEXT [options]
        kincade --blank [options]
        kincade --show-config [options]
@@ -218,6 +244,8 @@ usage: kincade FILE.ged --root PERSON [options]
 Make a cascading pedigree PDF from a GEDCOM file: chart 1 for the root person,
 a further chart wherever a line runs past the last column, and a name index at
 the end.
+With --family, chart 1 is rooted at a family instead: all the couple's
+children share its first box.
 With --fan, make a fan chart on one landscape page.
 
 options:
@@ -227,9 +255,13 @@ person:
   FILE.ged             GEDCOM file to read
   --root PERSON        person at the head of chart 1: a record ID (I12) or
                        part of a name
+  --family FAMILY      family record ID (F2): chart 1 holds all the couple's
+                       children together in its first box, with the couple and
+                       their ancestors above (pedigree only)
   --root-family FAMILY
                        family record ID for the root's spouse and marriage
-                       (default: first spouse family; pedigree only)
+                       (default: first spouse family; pedigree only; not with
+                       --family)
   --find TEXT          list matching people and their spouse families;
                        (default) marks the first spouse family
 
@@ -246,6 +278,10 @@ content:
                        follows the name
   --no-event-standins  show only births and deaths; privacy still uses
                        christenings, baptisms, burials and cremations
+  --no-marriage        leave out the marriage date and place lines (pedigree
+                       only)
+  --emigration         add an emigration date line; every box grows a line
+                       when anyone shown has one (pedigree only)
   --no-empty           leave out the boxes of unknown ancestors (pedigree
                        only)
   --show-ids           show each person's record ID beside their name, on the
@@ -271,9 +307,13 @@ page:
   --lang LANG          language name (such as de) or .toml path; user files:
                        ~/.config/kincade/lang/ (default: English)
   --title TEXT         page title (default: chart title and root's name)
+  --prefix TEXT        text before every box number: "D-" numbers the boxes
+                       D-1, D-2, ... (pedigree only)
   --footer TEXT        footer text (default: the language's footer)
   --no-footer          leave out the footer
   --no-page-numbers    leave out the page numbers (pedigree only)
+  --no-header          leave out the chart pages' title, chart number, rule
+                       and note (pedigree only)
   --blank              make one blank chart to fill in by hand (no GEDCOM
                        file) (pedigree only)
 
@@ -378,7 +418,7 @@ uv run kincade family.ged --root I12 --lang ~/my-wording.toml
 
 | Language | `--lang` | Pedigree title | Box labels |
 |---|---|---|---|
-| English | `en` | Cascading Pedigree | b. bp. m. mp. d. dp. |
+| English | `en` | Cascading Pedigree | birth: marriage: death:, places indented under the dates |
 | German | `de` | Ahnentafel | geb. verh. gest., in … |
 | Spanish | `es` | Árbol de antepasados | n. matr. f., en … |
 | French | `fr` | Arbre d’ascendance | naiss. mar. déc., à … |

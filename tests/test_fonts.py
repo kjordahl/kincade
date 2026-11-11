@@ -74,7 +74,8 @@ def ms_table(*subtables, version=0):
 @pytest.mark.system_fonts
 def test_system_fonts_are_found_and_embedded(pedigree, monkeypatch, tmp_path):
     """fonts="auto" finds Helvetica, Times New Roman and nested Liberation faces,
-    registers each face once, embeds four subsets in a real render and narrows a
+    registers each face once, embeds four subsets in a real render (the bold serif is
+    embedded only when an emigration line uses it) and narrows a
     kerned pair's width; the whole test skips when the machine has no system
     TrueType fonts.
     """
@@ -91,6 +92,7 @@ def test_system_fonts_are_found_and_embedded(pedigree, monkeypatch, tmp_path):
             "Arial Bold.ttf",
             "Times New Roman.ttf",
             "Times New Roman Italic.ttf",
+            "Times New Roman Bold.ttf",
         ):
             touch(mac_root / name)
         fonts, missing = load_fontset([mac_root])
@@ -100,6 +102,7 @@ def test_system_fonts_are_found_and_embedded(pedigree, monkeypatch, tmp_path):
             "Helvetica.ttc",
             "Times New Roman.ttf",
             "Times New Roman Italic.ttf",
+            "Times New Roman Bold.ttf",
         ]
         assert loaded[:2] == [
             ("Helvetica.ttc", "Helvetica"),
@@ -112,6 +115,7 @@ def test_system_fonts_are_found_and_embedded(pedigree, monkeypatch, tmp_path):
             "LIBERATIONSANS-BOLD.TTF",
             "LiberationSerif-Regular.ttf",
             "LiberationSerif-Italic.ttf",
+            "LiberationSerif-Bold.ttf",
         ]
         liberation_root = tmp_path / "liberation-root"
         for i, name in enumerate(names):
@@ -196,7 +200,10 @@ def test_font_folders(tmp_path, capsys, monkeypatch, request):
     ignores files it does not want and a folder the file system rejects is skipped;
     with no home folder only the system font folders are searched.
     """
-    assert load_fontset([tmp_path]) == (None, ["sans", "bold", "serif", "italic"])
+    assert load_fontset([tmp_path]) == (
+        None,
+        ["sans", "bold", "serif", "italic", "serif_bold"],
+    )
     assert capsys.readouterr() == ("", "")
 
     touch(tmp_path / "a" / "Arial.ttf")
@@ -252,6 +259,7 @@ def test_a_face_that_may_not_be_embedded(tmp_path, fake_loader, monkeypatch, cap
         "Arial Bold.ttf",
         "Times New Roman.ttf",
         "Times New Roman Italic.ttf",
+        "Times New Roman Bold.ttf",
     ):
         touch(tmp_path / name)
     fonts, missing = load_fontset([tmp_path])

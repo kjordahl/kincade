@@ -12,7 +12,7 @@ from pdfread import drawn
 
 # Each row is a person born on the date in SECRETVILLE, with no death and no family.
 # "lines" are the BIRT substructure's lines after "1 BIRT"; "seven_file" selects the
-# GEDCOM 7 builder. "printed" is the box text after "b. "; "year" is the index year, or
+# GEDCOM 7 builder. "printed" is the box text after "birth: "; "year" is the index year, or
 # None; "private" is whether Secretville is hidden under exclude_private.
 ROWS = [
     ("13 JAN 1917", ("2 DATE 13 JAN 1917",), "13 Jan 1917", 1917, False, False),
@@ -80,7 +80,7 @@ ROWS = [
     (
         HUGE,
         (f"2 DATE {HUGE}",),
-        "999999999999999999999999999999999999999999999…",  # the box truncates it
+        "99999999999999999999999999999999999999999…",  # the box truncates it
         None,
         True,
         False,
@@ -166,10 +166,10 @@ def test_a_birth_date_prints_indexes_and_hides_as_written(
     )
     public = drawn(render(tree, "I1"))
     hidden = drawn(render(tree, "I1", exclude_private=True))
-    assert f"b. {printed}" in public, raw
+    assert f"birth: {printed}" in public, raw
     index_entry = f"DOE, Pat (b. {year}), 1-1" if year is not None else "DOE, Pat, 1-1"
     assert index_entry in public, raw
-    assert (f"bp. {SECRETVILLE}" not in hidden) == private, raw
+    assert (SECRETVILLE not in hidden) == private, raw
 
 
 # Every shape of date text the reader must make sense of, valid or not.

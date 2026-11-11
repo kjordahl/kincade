@@ -201,7 +201,8 @@ def _no_english_labels(text):
     """None of the English-only markers (chart label, footer, index title, page text)
     appear."""
     return not any(
-        t == "Index" or t.startswith(("b. ", "d. ", "Chart ", "Created ", "Page 1 of"))
+        t == "Index"
+        or t.startswith(("birth:", "death:", "Chart ", "Created ", "Page 1 of"))
         for t in text
     )
 
@@ -447,7 +448,7 @@ def test_a_custom_language_changes_every_place_it_is_used(tmp_path):
         ged("0 @I1@ INDI", "1 NAME Pat /Doe/", "1 BIRT", "2 DATE BEF 1 JAN 1917")
     )
     text = drawn(render(tree, "I1", lang=custom, show_ids=True))
-    assert "b. before the 1st Jan 1917" in text
+    assert "birth: before the 1st Jan 1917" in text
     # the record_id template and the index.reference template
     assert "#I1" in text
     assert any(t.startswith("DOE, Pat #I1") and t.endswith(", 1:1") for t in text)
@@ -457,7 +458,7 @@ def test_a_custom_language_changes_every_place_it_is_used(tmp_path):
         ged("0 @I1@ INDI", "1 NAME Deb /Doe/", "1 BIRT", "2 DATE FROM 8 JAN 1920")
     )
     rewrite_text = drawn(render(rewrite_tree, "I1", lang=custom, index=False))
-    assert "b. from8 Jan 1920" in rewrite_text
+    assert "birth: from8 Jan 1920" in rewrite_text
 
     # a place too long to fit is cut with the language's own ellipsis ("~")
     long_place = (
@@ -467,7 +468,7 @@ def test_a_custom_language_changes_every_place_it_is_used(tmp_path):
         ged("0 @I1@ INDI", "1 NAME Lex /Doe/", "1 BIRT", f"2 PLAC {long_place}")
     )
     long_text = drawn(render(long_tree, "I1", lang=custom, index=False))
-    assert any(t.startswith("bp.") and t.endswith("~") for t in long_text)
+    assert any(t.startswith("Verylong") and t.endswith("~") for t in long_text)
 
     # the file name template, through the CLI
     ged_path = tmp_path / "pat.ged"

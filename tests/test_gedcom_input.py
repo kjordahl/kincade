@@ -104,9 +104,9 @@ def test_a_gedcom_5_5_1_file_with_quirks(quirks):
     assert quirks.people["I1"].birth.date == Date("about", Day(1764))
     # DEAT BET. 1622 - 1632 prints as a range
     text = drawn(render_charts(quirks, "I1", generations=1))
-    assert "d. 1622-1632" in text
+    assert "death: 1622-1632" in text
     # an individual-level MARR is ignored, as are custom tags and SUBM
-    assert not [t for t in text if t.startswith("m. 1 Jan 1800")]
+    assert not [t for t in text if t.startswith("marriage: 1 Jan 1800")]
     assert len(quirks.people) == 11 and len(quirks.families) == 3
     # PEDI adopted is listed before PEDI birth, but birth mode still prefers F1
     assert [pl.family for pl in quirks.people["I1"].parents] == ["F2", "F1"]
@@ -187,10 +187,10 @@ def test_a_gedcom_7_file():
         )
     )
     text = drawn(render_charts(tree, "I1", generations=2, index=False))
-    assert "b. 5 January (year unknown)" in text and not any(
+    assert "birth: 5 January (year unknown)" in text and not any(
         t.startswith("chr.") for t in text
     )
-    assert "m. spring" in text
+    assert "marriage: spring" in text
 
     # an empty DATE with an empty PHRASE is no date
     tree = read_gedcom(

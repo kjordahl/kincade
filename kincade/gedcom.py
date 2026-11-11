@@ -590,6 +590,7 @@ def _build_tree(records: list[_Node]) -> Tree:
                 + [_event(c) for c in rec.children if c.tag == "BAPM"],
                 burials=[_event(c) for c in rec.children if c.tag == "BURI"],
                 cremations=[_event(c) for c in rec.children if c.tag == "CREM"],
+                emigration=_first_event(rec, "EMIG"),
                 parents=_parent_links(rec, chil_lines),
                 families=[_id(c.value) for c in rec.children if c.tag == "FAMS"],
             )

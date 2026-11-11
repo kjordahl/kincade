@@ -8,6 +8,7 @@ from typing import NamedTuple
 
 from reportlab.pdfbase import pdfmetrics
 
+import kincade.lang
 import kincade.pdf
 
 NUMBER = rb"(-?[\d.]+)"
@@ -171,9 +172,34 @@ def runs(pdf):
     return [run for page in pages(pdf) for run in page]
 
 
+# Every box label of the bundled languages ("birth:", "geb.", ...). A box draws its
+# label and its value as two runs, the value in a column right of the label.
+BOX_LABELS = {
+    label
+    for code in kincade.lang.languages()
+    for label in kincade.lang.load_strings(code)["labels"].values()
+    if label
+}
+
+
 def drawn(pdf):
-    """The strings the PDF draws, in order."""
-    return [run.text for run in runs(pdf)]
+    """The strings the PDF draws, in order, with a box line read as one string: a box
+    label and the value drawn beside it give "label value" ("birth: 1 Jan 1900")."""
+    out = []
+    for page in pages(pdf):
+        label = None
+        for run in page:
+            if (
+                label is not None
+                and (run.y, run.font) == (label.y, label.font)
+                and run.x > label.x
+            ):
+                out[-1] = f"{label.text} {run.text}"
+                label = None
+                continue
+            out.append(run.text)
+            label = run if run.text in BOX_LABELS else None
+    return out
 
 
 def rectangles(pdf, paint="", page=0):

@@ -42,6 +42,12 @@ class Chart:
     via: str | None = None
     # The parents mode the chart was planned with: "birth" or "adoptive" (plan_charts)
     parents: str = "birth"
+    # Family-rooted chart (plan_family_charts): the family whose children share box 1, and
+    # those children in Family.children order. Box 1 holds no single person then
+    # (slots[1] is None); slots 2 and 3 are the family's father and mother. Always empty
+    # and None on a person-rooted chart.
+    family: str | None = None
+    children: tuple[str, ...] = ()
 
 
 def box_generation(pos: int) -> int:
@@ -125,9 +131,29 @@ def plan_charts(
         raise KeyError(root_id)
     if generations is not None and generations < 1:
         raise ValueError(f"generations must be at least 1, not {generations}")
-    charts = [_chart(tree, 1, root_id, 0, None, generations, parents, depth)]
-    roots = {root_id: 1}
-    for chart in charts:  # the list grows while we walk it, which is the BFS queue
+    return _plan_from(
+        tree,
+        [_chart(tree, 1, root_id, 0, None, generations, parents, depth)],
+        {root_id: 1},
+        generations,
+        parents,
+        depth,
+    )
+
+
+def _plan_from(
+    tree: Tree,
+    charts: list[Chart],
+    roots: dict[str, int],
+    generations: int | None,
+    parents: str,
+    depth: int,
+) -> list[Chart]:
+    """Breadth-first continuation of `charts` (which holds chart 1), `roots` mapping each
+    person who roots a chart to its number. The list grows while we walk it, which is
+    the BFS queue.
+    """
+    for chart in charts:
         for pos in range(2 ** (depth - 1), 2**depth):  # the chart's last generation
             pid = chart.slots[pos]
             if not pid or not any(tree.parent_ids(pid, parents)):
@@ -152,6 +178,95 @@ def plan_charts(
             if pid in roots:
                 chart.continuations[pos] = roots[pid]
     return charts
+
+
+def family_children(tree: Tree, family_id: str, parents: str = "birth") -> list[str]:
+    """The children drawn under a family, in Family.children order: those that are in the
+    tree and whose drawn parent family (Tree.parent_family) is this one. A child who is
+    drawn under another family in this parents mode (a birth child, in "adoptive" mode
+    with an adoptive family, say) is not listed here. Duplicate ids are listed once.
+    """
+    check_parents(parents)
+    family = tree.families[family_id]
+    out: list[str] = []
+    for cid in family.children:
+        drawn = tree.parent_family(cid, parents) if cid in tree.people else None
+        if drawn is not None and drawn.id == family_id and cid not in out:
+            out.append(cid)
+    return out
+
+
+def _family_chart(
+    tree: Tree,
+    family_id: str,
+    generations: int | None,
+    parents: str,
+    depth: int,
+) -> Chart:
+    """Chart 1 of a family-rooted pedigree: the family's drawn children share box 1 and
+    their parents are boxes 2 and 3. A parent is drawn unless every listed child is that
+    parent's stepchild (the same rule as Tree.parent_ids, so a step-parent is never
+    drawn) or the parent is not in the tree. Generations count the children as 1.
+    """
+    family = tree.families[family_id]
+    kids = family_children(tree, family_id, parents)
+    if not kids:
+        raise ValueError(f"family {family_id!r} has no children to draw")
+    drawn = frozenset(
+        p
+        for p in range(1, 2**depth)
+        if generations is None or box_generation(p) <= generations
+    )
+    slots: dict[int, str | None] = dict.fromkeys(range(1, 16))
+    pairs = [tree.parent_ids(kid, parents) for kid in kids]
+    if family.father and any(f == family.father for f, _ in pairs):
+        slots[2] = family.father
+    if family.mother and any(m == family.mother for _, m in pairs):
+        slots[3] = family.mother
+    for p in range(2, 2 ** (depth - 1)):
+        if child := slots[p]:
+            slots[2 * p], slots[2 * p + 1] = tree.parent_ids(child, parents)
+    return Chart(
+        1,
+        {p: slots[p] if p in drawn else None for p in slots},
+        None,
+        drawn=drawn,
+        depth=depth,
+        parents=parents,
+        family=family_id,
+        children=tuple(kids),
+    )
+
+
+def plan_family_charts(
+    tree: Tree,
+    family_id: str,
+    generations: int | None = None,
+    parents: str = "birth",
+    large_print: bool = False,
+) -> list[Chart]:
+    """Like plan_charts, but rooted at a family: chart 1 has the family's children
+    together in box 1 (Chart.children) and the couple above them as boxes 2 and 3, so
+    the pedigree is the ancestry of all the siblings at once. Continuation charts are
+    ordinary person-rooted charts, numbered breadth-first as in plan_charts.
+
+    `generations` counts the children as generation 1. Raises KeyError for an unknown
+    family and ValueError if it has no drawable children (see family_children).
+    """
+    check_parents(parents)
+    depth = page_depth(large_print)
+    if family_id not in tree.families:
+        raise KeyError(family_id)
+    if generations is not None and generations < 1:
+        raise ValueError(f"generations must be at least 1, not {generations}")
+    return _plan_from(
+        tree,
+        [_family_chart(tree, family_id, generations, parents, depth)],
+        {},
+        generations,
+        parents,
+        depth,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -345,6 +460,12 @@ def _birth_estimates(tree: Tree, charts: list[Chart], this_year: int) -> dict[st
     above them, has no estimate from below."""
     children: dict[str, set[str]] = {}
     for chart in charts:
+        # A family chart's children share box 1: each is a child of boxes 2 and 3. The
+        # youngest dated child gives the parents the most conservative estimate.
+        for kid in chart.children:
+            for pid in (chart.slots.get(2), chart.slots.get(3)):
+                if pid and kid != pid and tree.is_birth_parent(pid, kid):
+                    children.setdefault(pid, set()).add(kid)
         for pos, pid in chart.slots.items():
             child = chart.slots.get(pos // 2) if pos > 1 else None
             if pid and child and child != pid and tree.is_birth_parent(pid, child):
@@ -387,7 +508,7 @@ def _birth_estimates(tree: Tree, charts: list[Chart], this_year: int) -> dict[st
 
     result = {}
     for chart in charts:
-        for pid in chart.slots.values():
+        for pid in (*chart.children, *chart.slots.values()):
             if pid and pid not in result and (year := estimate(pid)) is not None:
                 result[pid] = year
     return result

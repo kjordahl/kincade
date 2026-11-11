@@ -37,6 +37,10 @@ PAGE_OPTIONS: dict[str, frozenset[str]] = {
             "adoptive_parents",
             "event_standins",
             "empty_boxes",
+            "marriages",
+            "emigration",
+            "header",
+            "prefix",
             "show_ids",
             "shorten_places",
             "index",
@@ -93,7 +97,7 @@ class Session:
         self._pedigree_depths: dict[tuple[str, bool, bool], int] = {}
 
     def load_fonts(self, directory: str | Path) -> Literal["embedded", "base14"]:
-        """Use all four embedded faces from this directory, or the built-in faces."""
+        """Use all five embedded faces from this directory, or the built-in faces."""
         fonts, _missing = load_fontset([Path(directory)])
         self.fonts = fonts if fonts is not None else BASE14
         return "embedded" if fonts is not None else "base14"
@@ -178,7 +182,8 @@ class Session:
                     ("marriage_place", family.marriage.place),
                 ):
                     if value:
-                        details.append(f"{strings['labels'][key]} {value}")
+                        label = strings["labels"][key]
+                        details.append(f"{label} {value}" if label else value)
             choices.append({"id": family_id, "spouse": name, "details": details})
         return choices
 

@@ -127,6 +127,8 @@ burial = "begr."
 burial_place = "in"
 cremation = "eingeäschert"
 cremation_place = "in"
+# Emigration date (--emigration), without its place: ausgewandert.
+emigration = "ausgew."
 
 [dates]
 # ABT → um (the usual genealogical form), EST → geschätzt (kept apart from ABT; "gesch."

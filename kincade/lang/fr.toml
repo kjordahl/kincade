@@ -130,6 +130,8 @@ burial = "inh."
 burial_place = "à"
 cremation = "crém."
 cremation_place = "à"
+# Emigration date (--emigration), without its place: émigré.
+emigration = "émig."
 
 [dates]
 # ABT → vers, EST → estim. (estimée), CAL → calc. (calculée): abbreviated, so they agree

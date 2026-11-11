@@ -221,9 +221,9 @@ def test_the_pedigree_fixture_document(pedigree):
     assert count_pages(pdf) == 7
     for text in (
         b"(Jane ASHFORD)",
-        b"(b. 14 Feb 1980)",
-        b"(bp. Springfield, Illinois)",
-        b"(m. 12 Jun 1975)",
+        b"(14 Feb 1980)",
+        b"(Springfield, Illinois)",
+        b"(12 Jun 1975)",
         b"(Cascading Pedigree \\227 Jane ASHFORD)",
         b"(Chart 1)",
         b"(Created 10 Oct 2026 using Kincade)",
@@ -232,7 +232,7 @@ def test_the_pedigree_fixture_document(pedigree):
         b"(ASHFORD, Jane \\(b. 1980\\), 1-1)",
     ):
         assert text in pdf, text
-    assert b"(m. 12 Jun 1975)" in pdf and b"(mp. Akron, Ohio)" in pdf
+    assert b"(12 Jun 1975)" in pdf and b"(Akron, Ohio)" in pdf
     first_page_runs = pages(pdf)[0]
     numbers = {int(r.text) for r in first_page_runs if r.text.isdigit()}
     # continuation numbers sit beside the last-column boxes
@@ -526,7 +526,8 @@ def chain_tree(depth, line="father", step=False, union_first=True):
 
 
 def marriages(pdf):
-    return [t for t in drawn(pdf) if t.startswith(("m. ", "mp. "))]
+    """The marriage lines drawn: the dates, and the places (all named *ville)."""
+    return [t for t in drawn(pdf) if t.startswith("marriage: ") or t.endswith("ville")]
 
 
 def test_continuation_charts_and_their_notes(pedigree):
@@ -550,10 +551,10 @@ def test_continuation_charts_and_their_notes(pedigree):
     tree = chain_tree(4, "father", step=False, union_first=True)
     assert [c.slots[1] for c in plan_charts(tree, "p0")] == ["p0", "x"]
     assert marriages(render_charts(tree, "p0")) == [
-        "m. 1930",
-        "mp. Xville",
-        "m. 1930",
-        "mp. Xville",
+        "marriage: 1930",
+        "Xville",
+        "marriage: 1930",
+        "Xville",
     ]
     stepped = chain_tree(4, "father", step=True, union_first=True)
     assert marriages(render_charts(stepped, "p0")) == []
@@ -576,14 +577,14 @@ def test_continuation_charts_and_their_notes(pedigree):
     )
     adoptive_tree.people["x"].families = ["fz", "f2", "fa"]
     assert marriages(render_charts(adoptive_tree, "p0")) == [
-        "m. 1930",
-        "mp. Xville",
-        "m. 1930",
-        "mp. Xville",
+        "marriage: 1930",
+        "Xville",
+        "marriage: 1930",
+        "Xville",
     ]
     assert marriages(render_charts(adoptive_tree, "p0", adoptive_parents=True)) == [
-        "m. 1940",
-        "m. 1940",
+        "marriage: 1940",
+        "marriage: 1940",
     ]
 
     # the pedigree fixture at generations=5 shows the continuation note
@@ -674,8 +675,8 @@ def test_the_parents_drawn(prefer):
     assert ("Kid KID (adopted)" in text) == (prefer == "adoptive")
     # the marriage line is the chosen family's
     text2 = drawn(render_charts(tree, generations=2, parents=prefer))
-    assert ("m. 1960" in text2) == (prefer == "birth")
-    assert ("m. 1950" in text2) == (prefer == "adoptive")
+    assert ("marriage: 1960" in text2) == (prefer == "birth")
+    assert ("marriage: 1950" in text2) == (prefer == "adoptive")
     # the index lists the chosen parents
     lines = kincade.pdf.build_index(
         tree,
@@ -713,7 +714,7 @@ def test_the_parents_drawn(prefer):
     assert "John PELL" not in with_empty and "John PELL" not in without
     assert "Mary PELL" in with_empty and "Mary PELL" in without
     assert "2" in with_empty and "2" not in without  # box 2's number
-    assert "m. 1950" not in with_empty and "mp. Reno" not in with_empty
+    assert "marriage: 1950" not in with_empty and "Reno" not in with_empty
 
     # a continuation chart uses the mode too
     lines = []
@@ -792,21 +793,21 @@ def test_the_root_box_and_its_family():
     # by default the first FAMS spouse and its matching marriage are shown
     text = joined_rows(drawn(render(tree, "R")))
     assert "spouse: First McCLURE" in text
-    assert "m. 1925" in text and "mp. First Town" in text
-    assert "spouse: Ada DEVRIES" not in text and "m. 1935" not in text
+    assert "marriage: 1925" in text and "First Town" in text
+    assert "spouse: Ada DEVRIES" not in text and "marriage: 1935" not in text
     # root_family switches spouse and marriage together; ancestors, continuations and
     # index membership do not change
     default_pdf, selected_pdf = render(tree, "R"), render(tree, "R", root_family="F2")
     text2 = joined_rows(drawn(selected_pdf))
     assert "spouse: Ada DEVRIES" in text2
-    assert "m. 1935" in text2 and "mp. Other Town" in text2
+    assert "marriage: 1935" in text2 and "Other Town" in text2
     changed = {
         "First McCLURE",
         "Ada DEVRIES",
-        "m. 1925",
-        "m. 1935",
-        "mp. First Town",
-        "mp. Other Town",
+        "1925",
+        "1935",
+        "First Town",
+        "Other Town",
     }
     default_first, selected_first = pages(default_pdf)[0], pages(selected_pdf)[0]
     assert [r for r in default_first if r.text not in changed] == [
@@ -886,26 +887,23 @@ def test_record_ids(pedigree):
 def test_places_are_shortened_to_fit():
     # the home country is dropped first, then middle parts marked with one ellipsis
     text = drawn(render_charts(read_gedcom(HOME_GED), generations=2))
-    assert "bp. Springfield, …, Northern Missouri, Western Region" in text
-    assert not any(t.startswith("bp. Springfield") and t.endswith("…") for t in text)
+    assert "Springfield, …, Northern Missouri, Western Region" in text
+    assert not any(t.startswith("Springfield") and t.endswith("…") for t in text)
     # a single USA place is not a home country
     text = drawn(render_charts(read_gedcom(HOME_GED), generations=1))
-    assert "bp. Springfield, …, Western Region, USA" in text
+    assert "Springfield, …, Western Region, USA" in text
     # the language's ellipsis is used
     text = drawn(
         render_charts(read_gedcom(HOME_GED), generations=2, lang={"ellipsis": "..."})
     )
-    assert "bp. Springfield, ..., Northern Missouri, Western Region" in text
-    # a place made only of commas prints only its label
+    assert "Springfield, ..., Northern Missouri, Western Region" in text
+    # a place made only of commas prints nothing
     commas_tree = read_gedcom(
         ged("0 @I1@ INDI", "1 NAME Root /ROOT/", "1 BIRT", f"2 PLAC {',' * 100}")
     )
-    line = next(
-        t
-        for t in drawn(render_charts(commas_tree, generations=1))
-        if t.startswith("bp.")
+    assert not any(
+        "," in t or "…" in t for t in drawn(render_charts(commas_tree, generations=1))
     )
-    assert line == "bp."
 
 
 def test_no_shorten_places_only_truncates():
@@ -915,8 +913,8 @@ def test_no_shorten_places_only_truncates():
     assert len(on) == len(off)
     changed = [(a, b) for a, b in zip(on, off, strict=True) if a != b]
     assert changed and all(b.endswith("…") for _, b in changed)
-    truncated = "bp. Springfield, Greene County, Northern Missouri, Weste…"
-    assert next(t for t in off if t.startswith("bp. Springfield")) == truncated
+    truncated = "Springfield, Greene County, Northern Missouri, W…"
+    assert next(t for t in off if t.startswith("Springfield")) == truncated
 
 
 # ---------------------------------------------------------------- the index
@@ -1160,9 +1158,9 @@ def test_event_standins():
             )
         )
         text = drawn(render_charts(tree, exclude_private=True))
-        assert "bp. Secretville" in text, record  # Jane's christening bounds her birth
+        assert "Secretville" in text, record  # Jane's christening bounds her birth
     # a burial stands in for a missing death, then a cremation
-    for record, label in (("BURI", "bur."), ("CREM", "crem.")):
+    for record, label in (("BURI", "burial:"), ("CREM", "cremation:")):
         tree = read_gedcom(
             ged(
                 "0 @I1@ INDI",
@@ -1187,7 +1185,7 @@ def test_event_standins():
         )
     )
     chr_text = drawn(render_charts(both_chr))
-    assert "chr. 1900" in chr_text and "1905" not in chr_text
+    assert "christening: 1900" in chr_text and "1905" not in chr_text
     # a burial beats a cremation when both are recorded
     both_buri = read_gedcom(
         ged(
@@ -1202,7 +1200,7 @@ def test_event_standins():
         )
     )
     buri_text = drawn(render_charts(both_buri))
-    assert "bur. 2010" in buri_text and "2015" not in buri_text
+    assert "burial: 2010" in buri_text and "2015" not in buri_text
     # a birth or death place alone blocks the stand-in
     blocked = read_gedcom(
         ged(
@@ -1214,7 +1212,9 @@ def test_event_standins():
             "2 DATE 1900",
         )
     )
-    assert "Secretville" not in drawn(render_charts(blocked, exclude_private=True))
+    blocked_text = drawn(render_charts(blocked, exclude_private=True))
+    assert "Secretville" in blocked_text
+    assert not any(t.startswith("christening:") for t in blocked_text)
     # the index years and sort use the stand-ins
     standin_tree = read_gedcom(
         ged("0 @I1@ INDI", "1 NAME Jane /Doe/", "1 CHR", "2 DATE 1900")
@@ -1228,7 +1228,7 @@ def test_event_standins():
     assert lines == ["DOE, Jane (chr. 1900), 1-1"]
     # event_standins=False draws births and deaths only
     off = drawn(render_charts(standin_tree, event_standins=False))
-    assert "chr. 1900" not in off
+    assert "christening: 1900" not in off
 
 
 # ---------------------------------------------------------------- names in boxes
@@ -1324,14 +1324,19 @@ def test_the_blank_chart_matches_a_filled_chart(pedigree):
 
     # labels sit where a filled box's labels sit, below an empty name line
     ours_runs, real_runs = runs(ours), runs(real)
-    for label in ("b.", "bp.", "spouse:", "m.", "mp.", "d.", "dp."):
+    for label in ("birth:", "spouse:", "marriage:", "death:"):
         want = {
             (r.x, r.y)
             for r in real_runs
             if r.text == label or r.text.startswith(label + " ")
         }
         mine = {(r.x, r.y) for r in ours_runs if r.text == label}
-        assert mine and mine <= want, label
+        if label == "marriage:":
+            # a filled box with no recorded marriage draws no marriage label, but
+            # every one it draws is where the blank chart has one
+            assert want and want < mine, label
+        else:
+            assert mine and mine <= want, label
 
     # marriage lines are on box 1 and the fathers' boxes only
     geom = kincade.pdf.LETTER
@@ -1339,6 +1344,14 @@ def test_the_blank_chart_matches_a_filled_chart(pedigree):
         pos for pos in range(1, 2**geom.gens) if kincade.pdf.has_marriage_lines(pos)
     }
     assert married == {1, 2, 4, 6, 8, 10, 12, 14}
+    # without marriages, every box is the mothers' height and the right column still
+    # fills the chart area
+    for large_print in (False, True):
+        bare = kincade.pdf.page_geom("letter", large_print, marriages=False)
+        boxes = range(1, 2**bare.gens)
+        assert len({bare.h(pos) for pos in boxes}) == 1
+        last = 2**bare.gens - 1
+        assert bare.box_top[last] + bare.h(last) == pytest.approx(bare.y_bottom)
 
     # header and footer are where a real chart's are
     title_ours = next((r.x, r.y) for r in ours_runs if r.text == "Cascading Pedigree")
@@ -1349,3 +1362,211 @@ def test_the_blank_chart_matches_a_filled_chart(pedigree):
     footer_ours = next(r.y for r in ours_runs if r.text == "Created using Kincade")
     footer_real = next(r.y for r in real_runs if r.text.startswith("Created "))
     assert footer_ours == footer_real
+
+
+def test_a_box_with_no_recorded_marriage_has_no_marriage_label():
+    """A known father whose family records no marriage date or place draws no
+    "marriage:" label; one with a marriage place draws it; the empty boxes of unknown
+    ancestors keep it to fill in; a marriage hidden for privacy keeps it too."""
+
+    def tree(*marriage):
+        return read_gedcom(
+            ged(
+                "0 @I1@ INDI",
+                "1 NAME Kid /Doe/",
+                "1 BIRT",
+                "2 DATE 1900",
+                "1 FAMC @F1@",
+                "0 @I2@ INDI",
+                "1 NAME Dad /Doe/",
+                "1 DEAT",
+                "2 DATE 1950",
+                "1 FAMS @F1@",
+                "0 @F1@ FAM",
+                "1 HUSB @I2@",
+                "1 CHIL @I1@",
+                *marriage,
+            )
+        )
+
+    def marriage_labels(pdf):
+        return [t for t in drawn(pdf) if t.startswith("marriage:")]
+
+    # box 1 (the kid, no family of their own) and box 2 (dad, nothing recorded) draw
+    # none; the empty fathers' boxes 4 and 6 keep theirs
+    bare = marriage_labels(render_charts(tree(), generations=3))
+    assert bare == ["marriage:", "marriage:"]
+    placed = drawn(render_charts(tree("1 MARR", "2 PLAC Reno"), generations=3))
+    assert placed.count("marriage:") == 3 and "Reno" in placed
+    assert marriage_labels(render_charts(tree(), generations=2)) == []
+    # the kid may be living: the kid's box and dad's marriage are hidden, and both
+    # keep their labels
+    living = read_gedcom(
+        ged(
+            "0 @I1@ INDI",
+            "1 NAME Kid /Doe/",
+            "1 FAMC @F1@",
+            "0 @I2@ INDI",
+            "1 NAME Dad /Doe/",
+            "1 FAMS @F1@",
+            "0 @F1@ FAM",
+            "1 HUSB @I2@",
+            "1 CHIL @I1@",
+        )
+    )
+    hidden = render_charts(living, generations=2, exclude_private=True)
+    assert "Living" in drawn(hidden)
+    assert marriage_labels(hidden) == ["marriage:", "marriage:"]
+
+
+def test_a_box_lines_up_its_dates_and_places():
+    """In a box, the labels start at its left inset and every date and place starts in
+    one column just right of the widest label the box draws (here "marriage:")."""
+    tree = read_gedcom(
+        ged(
+            "0 @I1@ INDI",
+            "1 NAME Kid /Doe/",
+            "1 FAMC @F1@",
+            "0 @I2@ INDI",
+            "1 NAME Dad /Doe/",
+            "1 BIRT",
+            "2 DATE 1900",
+            "2 PLAC Aville",
+            "1 DEAT",
+            "2 DATE 1970",
+            "2 PLAC Cville",
+            "0 @F1@ FAM",
+            "1 HUSB @I2@",
+            "1 CHIL @I1@",
+            "1 MARR",
+            "2 DATE 1925",
+            "2 PLAC Bville",
+        )
+    )
+    page = pages(render_charts(tree, generations=2))[0]
+    values = [
+        r
+        for r in page
+        if r.text in ("1900", "Aville", "1925", "Bville", "1970", "Cville")
+    ]
+    assert len(values) == 6
+    # dad's box (box 2): the labels on the values' baselines
+    dad = [r for r in page if r.text.endswith(":") and r.y in {v.y for v in values}]
+    assert [r.text for r in dad] == ["birth:", "marriage:", "death:"]
+    assert len({r.x for r in dad}) == 1
+    assert len({r.x for r in values}) == 1
+    marriage = next(r for r in dad if r.text == "marriage:")
+    space = kincade.pdf.text_width(" ", marriage.font, marriage.size)
+    assert values[0].x == approx(marriage.right() + space, abs=0.01)
+
+
+def test_emigration_dates():
+    """--emigration draws an emigration date (never its place) after the marriage and
+    before the death, and every box grows a line, but only when someone drawn, and not
+    hidden, has an emigration date. A known person without one skips the line; empty
+    boxes keep its label."""
+
+    def tree(*dad_extra, kid_birth="1900"):
+        return read_gedcom(
+            ged(
+                "0 @I1@ INDI",
+                "1 NAME Kid /Doe/",
+                "1 BIRT",
+                f"2 DATE {kid_birth}",
+                "1 FAMC @F1@",
+                "0 @I2@ INDI",
+                "1 NAME Dad /Doe/",
+                "1 DEAT",
+                "2 DATE 1950",
+                *dad_extra,
+                "0 @F1@ FAM",
+                "1 HUSB @I2@",
+                "1 CHIL @I1@",
+                "1 MARR",
+                "2 DATE 1925",
+            )
+        )
+
+    emigrated = tree("1 EMIG", "2 DATE 16 APR 1923", "2 PLAC Bergen, Norway")
+    on = render_charts(emigrated, generations=3, emigration=True)
+    off = render_charts(emigrated, generations=3)
+    text = drawn(on)
+    dad = text.index("Dad DOE")
+    assert text[dad + 1 : dad + 5] == [
+        "birth:",
+        "marriage: 1925",
+        "emigration: 16 Apr 1923",
+        "death: 1950",
+    ]
+    # set in the bold serif, label and date; the other lines stay in the serif
+    bold = {r.text for r in runs(on) if r.font == "Times-Bold"}
+    assert bold == {"emigration:", "16 Apr 1923"}
+    assert "Bergen, Norway" not in text and not any(
+        t.startswith("emigration:") for t in drawn(off)
+    )
+    # the kid (box 1) has none and skips the line; the empty boxes 3-7 keep the label
+    assert text.count("emigration:") == 5
+    # every box is a line taller
+    taller = [h for *_, h in rectangles(on, "B*")]
+    assert taller == [h + kincade.pdf.LEADING for *_, h in rectangles(off, "B*")]
+
+    # no dated emigration record: the layout is the one without the flag
+    for quiet in (tree(), tree("1 EMIG", "2 PLAC Bergen, Norway")):
+        assert rectangles(
+            render_charts(quiet, generations=3, emigration=True), "B*"
+        ) == rectangles(render_charts(quiet, generations=3), "B*")
+    # nor does a hidden person's: here the kid may be living, and only the kid
+    # emigrated
+    living_kid = read_gedcom(
+        ged("0 @I1@ INDI", "1 NAME Kid /Doe/", "1 EMIG", "2 DATE 2001")
+    )
+    hidden = render_charts(
+        living_kid, generations=2, emigration=True, exclude_private=True
+    )
+    assert rectangles(hidden, "B*") == rectangles(
+        render_charts(living_kid, generations=2, exclude_private=True), "B*"
+    )
+    assert "2001" not in " ".join(drawn(hidden))
+    assert "emigration: 2001" in drawn(
+        render_charts(living_kid, generations=2, emigration=True)
+    )
+
+
+def test_a_box_number_prefix(pedigree):
+    """--prefix goes before every box number, the family chart's box 1 included; a
+    number that would come near the page's left edge is squeezed to stay clear of it,
+    to half width at most."""
+
+    def numbers(pdf):
+        return [r for r in runs(pdf) if r.font == "Helvetica-Bold" and r.size == 9]
+
+    plain = [r.text for r in numbers(render_charts(pedigree, generations=4))]
+    prefixed = numbers(render_charts(pedigree, generations=4, prefix="D-"))
+    assert plain and [r.text for r in prefixed] == [f"D-{n}" for n in plain]
+    # each still ends where the plain number ended, just left of its box
+    for run, n in zip(prefixed, plain, strict=True):
+        assert run.right() == approx(
+            next(
+                r.right()
+                for r in numbers(render_charts(pedigree, generations=4))
+                if r.text == n
+            ),
+            abs=0.01,
+        )
+    fam_id = next(f.id for f in pedigree.families.values() if f.children)
+    family_pdf = kincade.pdf.render_family(
+        pedigree,
+        fam_id,
+        Options(fonts="base14", compress=False, index=False, prefix="M-"),
+    )
+    fam_numbers = [r.text for r in numbers(family_pdf)]
+    assert fam_numbers and all(t.startswith("M-") for t in fam_numbers)
+    # large print, a long prefix: box 1's number is squeezed to keep 6 pt from the edge
+    big = render_charts(pedigree, large_print=True, prefix="DD-")
+    one = next(r for r in runs(big) if r.text == "DD-1")
+    assert 0.5 < one.scale < 1
+    assert one.x == approx(kincade.pdf.NUMBER_EDGE, abs=0.01)
+    # never squeezed below half width: a longer one runs nearer the edge, whole
+    longest = render_charts(pedigree, large_print=True, prefix="Line-")
+    one = next(r for r in runs(longest) if r.text == "Line-1")
+    assert one.scale == 0.5 and 0 < one.x < kincade.pdf.NUMBER_EDGE
